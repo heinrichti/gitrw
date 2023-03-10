@@ -1,3 +1,4 @@
+use std::slice;
 use std::{fmt::Display, ops::Range};
 
 use bstr::ByteSlice;
@@ -44,7 +45,7 @@ pub enum TagTargetType {
 pub struct Tree {
     _object_hash: ObjectHash,
     lines: Vec<TreeLine>,
-    bytes: Box<[u8]>,
+    _bytes: Box<[u8]>,
 }
 
 impl Display for Tree {
@@ -54,7 +55,8 @@ impl Display for Tree {
                 f,
                 "{} {}",
                 line.hash,
-                self.bytes[line.text.clone()].as_bstr()
+                unsafe { slice::from_raw_parts(line.text.0, line.text.1) }.as_bstr(),
+                // self.bytes[line.text.clone()].as_bstr()
             )?;
         }
         Ok(())
@@ -64,7 +66,7 @@ impl Display for Tree {
 #[derive(Debug)]
 struct TreeLine {
     hash: ObjectHash,
-    text: Range<usize>,
+    text: (*const u8, usize)
 }
 
 impl Tree {
@@ -79,12 +81,14 @@ impl Tree {
         let mut lines = Vec::new();
 
         while let Some(null_terminator_index) = null_terminator_index_opt {
-            let text = position..null_terminator_index + position;
-            let hash = position + null_terminator_index + 1..position + null_terminator_index + 21;
+            let text = (
+                unsafe { bytes.as_ptr().add(position) },
+                null_terminator_index);
+                
+            let tree_hash: ObjectHash = 
+                bytes[position + null_terminator_index + 1..position + null_terminator_index + 21].into();
+
             position += null_terminator_index + 21;
-            let mut hash_buffer = [0u8; 20];
-            hash_buffer.copy_from_slice(&bytes[hash]);
-            let tree_hash = ObjectHash::new(hash_buffer);
 
             lines.push(TreeLine {
                 hash: tree_hash,
@@ -97,7 +101,7 @@ impl Tree {
         Tree {
             _object_hash: object_hash,
             lines,
-            bytes,
+            _bytes: bytes,
         }
     }
 }

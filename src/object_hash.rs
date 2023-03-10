@@ -44,6 +44,16 @@ impl ObjectHash {
     }
 }
 
+impl From<&[u8]> for ObjectHash {
+    fn from(value: &[u8]) -> Self {
+        assert_eq!(20, value.len());
+
+        let mut buf = [0u8; 20];
+        buf.copy_from_slice(value);
+        ObjectHash::new(buf)
+    }
+}
+
 impl From<&BStr> for ObjectHash {
     fn from(value: &BStr) -> Self {
         ObjectHash::from_bstr(value)

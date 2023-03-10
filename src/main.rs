@@ -1,6 +1,8 @@
 use std::path::Path;
 
+use bstr::ByteSlice;
 use clap::{Parser, Subcommand, ArgGroup};
+use gitrw::object_hash::ObjectHash;
 use mimalloc::MiMalloc;
 
 #[global_allocator]
@@ -84,6 +86,8 @@ fn main() {
 
         Commands::PruneEmpty => {
             println!("Pruning empty commits");
+            let object_hash: ObjectHash = b"31bbffd9c811e04342e1ef25485f338ad0de35d5".as_bstr().into();
+            gitrw::print_tree(repository_path, object_hash).unwrap(); 
             todo!();
         }
     };
