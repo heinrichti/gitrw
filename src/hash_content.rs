@@ -5,19 +5,24 @@ use std::{
     path::Path,
 };
 
+use flate2::Status;
 use libdeflater::Decompressor;
 use memmap2::Mmap;
 
 use crate::packreader::PackObject;
 
 pub struct Compression {
-    decompressor: Decompressor
+    libdeflate_decompressor: Decompressor,
+    flate2_decompressor: flate2::Decompress
 }
+
+static mut FILE_BUF: [u8; 8192] = [0u8; 8192];
 
 impl Compression {
     pub fn new() -> Self {
         Compression {
-            decompressor: Decompressor::new()
+            libdeflate_decompressor: Decompressor::new(),
+            flate2_decompressor: flate2::Decompress::new(false)
         }
     }
 
@@ -32,7 +37,7 @@ impl Compression {
         let mut buf: Vec<u8> = Vec::with_capacity(pack_object.data_size);
         unsafe { buf.set_len(pack_object.data_size) };
 
-        self.decompressor.deflate_decompress(slice, &mut buf).unwrap();
+        self.libdeflate_decompressor.deflate_decompress(slice, &mut buf).unwrap();
 
         buf.into_boxed_slice()
     }
@@ -46,20 +51,23 @@ impl Compression {
         let file_path = base_path.join("objects").join(x).join(xs);
 
         let file = File::open(file_path)?;
-        let file_size: usize = File::metadata(&file).unwrap().len() as usize;
-        let mut file_buffer = Vec::with_capacity(file_size - 2);
         let mut buf_reader = BufReader::new(file);
         buf_reader.seek_relative(2).unwrap();
-        let bytes_read = buf_reader.read_to_end(&mut file_buffer).unwrap();
-        if bytes_read != file_size - 2 {
-            panic!("bytes_read[{bytes_read}] != file_size[{file_size}]");
+
+        let mut output_buf = Vec::new();
+
+        self.flate2_decompressor.reset(false);
+
+        let mut status = Status::Ok;
+        while status == Status::Ok {
+            let bytes_read = buf_reader.read(unsafe { &mut FILE_BUF }).unwrap();
+            output_buf.reserve(bytes_read*2);
+
+            status = self.flate2_decompressor
+                .decompress_vec(unsafe { &FILE_BUF[0..bytes_read] }, &mut output_buf, flate2::FlushDecompress::None)
+                .unwrap();
         }
 
-        let mut buf = Vec::with_capacity(file_size * 2);
-        unsafe { buf.set_len(file_size * 2); }
-
-        self.decompressor.deflate_decompress(&file_buffer, &mut buf).unwrap();
-
-        Ok(buf.into_boxed_slice())
+        Ok(output_buf.into_boxed_slice())
     }
 }

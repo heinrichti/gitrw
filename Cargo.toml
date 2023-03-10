@@ -19,3 +19,4 @@ rustc-hash = "1.1.0"
 mimalloc = { version = "0.1.34", default-features = false }
 clap = { version = "4.1.8", features = ["derive"] }
 libdeflater = { version = "0.12.0", features = ["use_rust_alloc"] }
+flate2 = { version = "1.0.25", default-features = false, features = ["zlib-ng"] }
