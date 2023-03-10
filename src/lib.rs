@@ -1,4 +1,4 @@
-use std::{error::Error, io::Write, path::Path};
+use std::{error::Error, io::{Write, BufWriter}, path::Path};
 
 use commit_walker::CommitWalker;
 use hash_content::Compression;
@@ -31,9 +31,10 @@ pub fn list_contributors(repository_path: &Path) -> Result<(), Box<dyn Error>> {
     let mut committers: Vec<_> = committers.iter().collect();
     committers.sort();
 
-    let mut lock = std::io::stdout().lock();
+    let lock = std::io::stdout().lock();
+    let mut handle = BufWriter::new(lock);
     for committer in committers {
-        writeln!(lock, "{committer}")?;
+        writeln!(handle, "{committer}")?;
     }
 
     Ok(())

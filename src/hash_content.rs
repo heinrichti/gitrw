@@ -56,6 +56,7 @@ impl Compression {
         }
 
         let mut buf = Vec::with_capacity(file_size * 2);
+        unsafe { buf.set_len(file_size * 2); }
 
         self.decompressor.deflate_decompress(&file_buffer, &mut buf).unwrap();
 
