@@ -72,7 +72,7 @@ impl Tree {
         let mut position = 0;
 
         if skip_first_null {
-            position = bytes.iter().position(|x| *x == b'\0').unwrap();
+            position = bytes.iter().position(|x| *x == b'\0').unwrap() + 1;
         }
 
         let mut null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');
