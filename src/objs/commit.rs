@@ -1,11 +1,11 @@
-use std::slice;
+use std::{slice, marker::PhantomData};
 
 use bstr::ByteSlice;
 
 use crate::object_hash::ObjectHash;
 
 #[derive(Debug)]
-pub struct Commit {
+pub struct Commit<'a> {
     pub object_hash: ObjectHash,
     _bytes: Box<[u8]>,
     // tree: Range<usize>,
@@ -16,10 +16,11 @@ pub struct Commit {
     parents: Vec<(*const u8, usize)>,
     author_line: (*const u8, usize),
     committer_line: (*const u8, usize),
+    _phantom: PhantomData<&'a [u8]>
 }
 
-impl Commit {
-    pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit {
+impl<'a> Commit<'a> {
+    pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
         let mut line_reader = bytes.lines();
         if skip_first_null {
             line_reader.next();
@@ -56,6 +57,7 @@ impl Commit {
             parents,
             author_line,
             committer_line,
+            _phantom: PhantomData
             // message,
         }
     }
@@ -78,13 +80,13 @@ impl Commit {
     //     &self.bytes[self.message.clone()].as_bstr()
     // }
 
-    pub fn author(&self) -> &bstr::BStr {
+    pub fn author(&self) -> &'a bstr::BStr {
         Commit::contributor(unsafe {
             std::slice::from_raw_parts(self.author_line.0, self.author_line.1)
         })
     }
 
-    fn contributor(line: &[u8]) -> &bstr::BStr {
+    fn contributor(line: &'a [u8]) -> &'a bstr::BStr {
         let mut spaces = 0;
         for (i, b) in line.iter().rev().enumerate() {
             let index_from_back = line.len() - i - 1;
@@ -100,7 +102,7 @@ impl Commit {
         return (b"").as_bstr();
     }
 
-    pub fn committer(&self) -> &bstr::BStr {
+    pub fn committer(&self) -> &'a bstr::BStr {
         Commit::contributor(unsafe {
             std::slice::from_raw_parts(self.committer_line.0, self.committer_line.1)
         })

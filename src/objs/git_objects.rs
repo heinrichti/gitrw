@@ -1,5 +1,6 @@
+use std::marker::PhantomData;
 use std::slice;
-use std::{fmt::Display, ops::Range};
+use std::fmt::Display;
 
 use bstr::ByteSlice;
 
@@ -9,9 +10,9 @@ use crate::objs::tag::Tag;
 use super::commit::Commit;
 
 #[derive(Debug)]
-pub enum GitObject {
-    Commit(Commit),
-    Tree(Tree),
+pub enum GitObject<'a> {
+    Commit(Commit<'a>),
+    Tree(Tree<'a>),
     // Blob(Blob),
     Tag(Tag),
 }
@@ -42,13 +43,13 @@ pub enum TagTargetType {
 }
 
 #[derive(Debug)]
-pub struct Tree {
+pub struct Tree<'a> {
     _object_hash: ObjectHash,
-    lines: Vec<TreeLine>,
+    lines: Vec<TreeLine<'a>>,
     _bytes: Box<[u8]>,
 }
 
-impl Display for Tree {
+impl Display for Tree<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.lines.iter() {
             writeln!(
@@ -56,7 +57,6 @@ impl Display for Tree {
                 "{} {}",
                 line.hash,
                 unsafe { slice::from_raw_parts(line.text.0, line.text.1) }.as_bstr(),
-                // self.bytes[line.text.clone()].as_bstr()
             )?;
         }
         Ok(())
@@ -64,13 +64,14 @@ impl Display for Tree {
 }
 
 #[derive(Debug)]
-struct TreeLine {
+struct TreeLine<'a> {
     hash: ObjectHash,
-    text: (*const u8, usize)
+    text: (*const u8, usize),
+    _phantom: PhantomData<&'a [u8]>
 }
 
-impl Tree {
-    pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree {
+impl<'a> Tree<'a> {
+    pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree<'a> {
         let mut position = 0;
 
         if skip_first_null {
@@ -93,6 +94,7 @@ impl Tree {
             lines.push(TreeLine {
                 hash: tree_hash,
                 text,
+                _phantom: PhantomData
             });
 
             null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');

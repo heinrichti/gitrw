@@ -15,7 +15,7 @@ pub struct CommitWalker<'a> {
     pack_reader: PackReader,
     compression: Compression,
     repository_path: &'a Path,
-    commits: Vec<Commit>,
+    commits: Vec<Commit<'a>>,
     processed_commits: FxHashSet<ObjectHash>,
 }
 
@@ -54,7 +54,7 @@ impl<'a> CommitWalker<'a> {
 }
 
 impl<'a> Iterator for CommitWalker<'a> {
-    type Item = Commit;
+    type Item = Commit<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
@@ -81,12 +81,12 @@ impl<'a> Iterator for CommitWalker<'a> {
     }
 }
 
-fn read_commit_from_ref(
+fn read_commit_from_ref<'a>(
     compression: &mut Compression,
     repository_path: &Path,
     pack_reader: &PackReader,
     r: crate::refs::GitRef,
-) -> Option<GitObject> {
+) -> Option<GitObject<'a>> {
     let hash = match r {
         crate::refs::GitRef::Simple(simple) => simple.hash,
         crate::refs::GitRef::Tag(tag) => tag.hash,
@@ -110,12 +110,12 @@ fn read_commit_from_ref(
     None
 }
 
-fn read_object_from_hash(
+fn read_object_from_hash<'a>(
     compression: &mut Compression,
     repository_path: &Path,
     pack_reader: &PackReader,
     hash: ObjectHash,
-) -> Option<GitObject> {
+) -> Option<GitObject<'a>> {
     if let Some(obj) = pack_reader.read_git_object(compression, hash.clone()) {
         return Some(obj);
     }
