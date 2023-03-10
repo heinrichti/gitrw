@@ -34,6 +34,7 @@ pub fn get_pack_offsets(idx_path: &Path) -> Result<Vec<PackOffset>, Box<dyn Erro
     }
 
     let mut hashes = Vec::with_capacity(object_count);
+
     for _ in 0..object_count {
         let mut hash = [0u8; 20];
         reader.read_exact(&mut hash)?;
@@ -72,10 +73,6 @@ pub fn get_pack_offsets(idx_path: &Path) -> Result<Vec<PackOffset>, Box<dyn Erro
     let mut pack_offset = [0u8; 8];
     for large_offset in large_offsets {
         reader.read_exact(&mut pack_offset)?;
-        if cfg!(target_endian = "little") {
-            pack_offset.reverse();
-        }
-
         result.push(PackOffset {
             hash: ObjectHash::new(large_offset),
             offset: usize::from_be_bytes(pack_offset),

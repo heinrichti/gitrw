@@ -38,7 +38,7 @@
                     "kind": "bin"
                 }
             },
-            "args": [".git"],
+            "args": ["/linux.git"],
             "cwd": "${workspaceFolder}"
         },
         {

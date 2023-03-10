@@ -1,5 +1,3 @@
-#![feature(portable_simd)]
-
 use std::{error::Error, io::Write, path::Path};
 
 use commit_walker::CommitWalker;
