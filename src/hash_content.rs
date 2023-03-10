@@ -5,18 +5,19 @@ use std::{
     path::Path,
 };
 
+use libdeflater::Decompressor;
 use memmap2::Mmap;
 
 use crate::packreader::PackObject;
 
 pub struct Compression {
-    decompressor: flate2::Decompress,
+    decompressor: Decompressor
 }
 
 impl Compression {
     pub fn new() -> Self {
         Compression {
-            decompressor: flate2::Decompress::new(true),
+            decompressor: Decompressor::new()
         }
     }
 
@@ -31,10 +32,7 @@ impl Compression {
         let mut buf: Vec<u8> = Vec::with_capacity(pack_object.data_size);
         unsafe { buf.set_len(pack_object.data_size) };
 
-        self.decompressor.reset(false);
-        self.decompressor
-            .decompress(slice, &mut buf, flate2::FlushDecompress::Finish)
-            .unwrap();
+        self.decompressor.deflate_decompress(slice, &mut buf).unwrap();
 
         buf.into_boxed_slice()
     }
@@ -58,10 +56,8 @@ impl Compression {
         }
 
         let mut buf = Vec::with_capacity(file_size * 2);
-        self.decompressor.reset(false);
-        self.decompressor
-            .decompress_vec(&file_buffer, &mut buf, flate2::FlushDecompress::Finish)
-            .unwrap();
+
+        self.decompressor.deflate_decompress(&file_buffer, &mut buf).unwrap();
 
         Ok(buf.into_boxed_slice())
     }
