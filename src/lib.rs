@@ -1,6 +1,6 @@
 use std::{error::Error, io::{Write, BufWriter}, path::Path};
 
-use commit_walker::CommitWalker;
+use commit_walker::{CommitWalker, SortedCommitWalker};
 use hash_content::Compression;
 use object_hash::ObjectHash;
 use objs::git_objects::{GitObject, Tree};
@@ -58,6 +58,18 @@ pub fn print_tree(repository_path: &Path, object_hash: ObjectHash) -> Result<(),
             let tree = Tree::create(object_hash, bytes, true);
             println!("{tree}");
         } else { panic!() };
+    }
+
+    Ok(())
+}
+
+pub fn remove_empty_commits(repository_path: &Path) -> Result<(), Box<dyn Error>> {
+    let commit_walker = SortedCommitWalker::create(repository_path);
+
+    let lock = std::io::stdout().lock();
+    let mut handle = BufWriter::new(lock);
+    for commit in commit_walker.into_iter() {
+        writeln!(handle, "{0}", commit.object_hash)?;
     }
 
     Ok(())

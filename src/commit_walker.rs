@@ -1,3 +1,4 @@
+use core::panic;
 use std::path::Path;
 
 use bstr::ByteSlice;
@@ -10,6 +11,89 @@ use crate::{
     objs::{commit::Commit, tag::Tag},
     packreader::PackReader,
 };
+
+pub struct SortedCommitWalker<'a> {
+    pack_reader: PackReader,
+    compression: Compression,
+    repository_path: &'a Path,
+    commits: Vec<Commit<'a>>,
+    processed_commits: FxHashSet<ObjectHash>,
+    parents_seen: FxHashSet<ObjectHash>,
+}
+
+impl<'a> SortedCommitWalker<'a> {
+    pub fn create(repository_path: &Path) -> SortedCommitWalker {
+        let mut commits = Vec::new();
+        let processed_commits = FxHashSet::default();
+        let parents_seen = FxHashSet::default();
+
+        let pack_reader = PackReader::create(repository_path).unwrap();
+        let mut compression = Compression::new();
+
+        let refs = crate::refs::GitRef::read_all(repository_path).unwrap();
+        for r in refs {
+            let commit = read_commit_from_ref(&mut compression, repository_path, &pack_reader, r);
+            if let Some(x) = commit {
+                commits.push(x);
+            };
+        }
+
+        let commits = commits
+        .into_iter()
+        .map(|git_object| match git_object {
+            GitObject::Commit(commit) => commit,
+            _ => panic!("this should have been a commit, but wasn't")
+        })
+        .collect();
+
+        SortedCommitWalker { 
+            pack_reader, 
+            compression, 
+            repository_path, 
+            commits, 
+            processed_commits,
+            parents_seen,
+         }
+
+    }
+}
+
+impl<'a> Iterator for SortedCommitWalker<'a>  {
+    type Item = Commit<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(commit) = self.commits.pop() {
+            if self.processed_commits.contains(&commit.object_hash) {
+                self.parents_seen.remove(&commit.object_hash);
+            } else {
+                if !self.parents_seen.insert(commit.object_hash.clone()) || commit.parents().is_empty() {
+                    self.processed_commits.insert(commit.object_hash.clone());
+                    return Some(commit);
+                } else {
+                    let parents = commit.parents();
+                    self.commits.push(commit);
+                    for parent in parents {
+                        if !self.processed_commits.contains(&parent) {
+                            let parent_commit = read_object_from_hash(
+                                &mut self.compression, 
+                                self.repository_path, 
+                                &self.pack_reader, 
+                                parent).unwrap();
+                            
+                            match parent_commit {
+                                GitObject::Commit(pc) => self.commits.push(pc),
+                                _ => panic!("Commit expected, got something else.")
+                            };
+                        }
+                    }
+                }
+            }
+        }
+            
+        None
+    }
+    
+}
 
 pub struct CommitWalker<'a> {
     pack_reader: PackReader,

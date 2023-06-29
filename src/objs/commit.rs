@@ -1,6 +1,6 @@
 use std::{slice, marker::PhantomData};
 
-use bstr::ByteSlice;
+use bstr::{ByteSlice, Lines};
 
 use crate::object_hash::ObjectHash;
 
@@ -21,10 +21,22 @@ pub struct Commit<'a> {
 
 impl<'a> Commit<'a> {
     pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
-        let mut line_reader = bytes.lines();
+        let mut line_reader: Lines<'_>;
+        
         if skip_first_null {
-            line_reader.next();
-        };
+            let mut null_idx = 0;
+            for i in 0..bytes.len() {
+                if bytes[i] == b'\0' {
+                    null_idx = i;
+                    break;
+                }
+            }
+            line_reader = bytes[null_idx..].lines();
+        } else {
+            line_reader = bytes.lines();
+        }
+
+        // skipping the tree for now
         line_reader.next();
         // let tree = line_reader.next().map(|x| x.start + 5..x.end).unwrap();
         let mut parents = Vec::with_capacity(1);
