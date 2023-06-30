@@ -8,7 +8,7 @@ use std::path::Path;
 use memmap2::Mmap;
 use rustc_hash::FxHashMap;
 
-use crate::hash_content::Compression;
+use crate::compression::Compression;
 use crate::idx_reader::get_pack_offsets;
 use crate::objs::ObjectHash;
 use crate::objs::Tag;

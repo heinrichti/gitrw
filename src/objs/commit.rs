@@ -73,7 +73,7 @@ impl<'a> Commit<'a> {
         let mut result = Vec::with_capacity(self.parents.len());
         for parent in self.parents.iter() {
             let a = unsafe { slice::from_raw_parts(parent.0, parent.1) };
-            result.push(a.as_bstr().into());
+            result.push(a.as_bstr().try_into().unwrap());
         }
 
         result

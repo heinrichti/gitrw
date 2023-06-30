@@ -48,7 +48,8 @@ impl Tag {
     pub fn object(&self) -> ObjectHash {
         unsafe { slice::from_raw_parts(self.object.0, self.object.1) }
             .as_bstr()
-            .into()
+            .try_into()
+            .unwrap()
     }
 
     pub fn target_type(&self) -> TagTargetType {

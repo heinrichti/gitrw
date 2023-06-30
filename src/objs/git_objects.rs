@@ -67,7 +67,8 @@ impl<'a> Tree<'a> {
 
             let tree_hash: ObjectHash = bytes
                 [position + null_terminator_index + 1..position + null_terminator_index + 21]
-                .into();
+                .try_into()
+                .unwrap();
 
             position += null_terminator_index + 21;
 

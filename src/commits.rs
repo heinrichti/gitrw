@@ -7,7 +7,7 @@ use rustc_hash::FxHashSet;
 use crate::objs::{Commit, Tag, Tree};
 
 use super::{
-    hash_content::Compression,
+    compression::Compression,
     objs::{
         ObjectHash, {GitObject, TagTargetType},
     },
@@ -181,8 +181,13 @@ fn read_commit_from_ref<'a>(
         GitRef::Tag(tag) => tag.hash,
     };
 
-    let mut git_object =
-        read_object_from_hash(compression, repository_path, pack_reader, hash.into()).unwrap();
+    let mut git_object = read_object_from_hash(
+        compression,
+        repository_path,
+        pack_reader,
+        hash.try_into().unwrap(),
+    )
+    .unwrap();
     while let GitObject::Tag(tag) = &git_object {
         if tag.target_type() == TagTargetType::Tree {
             break;
@@ -209,7 +214,7 @@ fn read_object_from_hash<'a>(
         return Some(obj);
     }
 
-    if let Ok(bytes) = compression.from_file(repository_path, &hash.to_string()) {
+    if let Ok(bytes) = compression.unpack_file(repository_path, &hash.to_string()) {
         if bytes.starts_with(b"commit ") {
             return Some(GitObject::Commit(Commit::create(hash, bytes, true)));
         }

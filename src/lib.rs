@@ -1,13 +1,13 @@
 use std::{error::Error, path::PathBuf};
 
 use commits::{CommitsFifoIter, CommitsLifoIter};
-use hash_content::Compression;
+use compression::Compression;
 use objs::Commit;
 use packreader::PackReader;
 use refs::GitRef;
 
 mod commits;
-mod hash_content;
+mod compression;
 mod idx_reader;
 mod pack_diff;
 mod packreader;

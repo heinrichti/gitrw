@@ -44,7 +44,7 @@ impl Compression {
         buf.into_boxed_slice()
     }
 
-    pub fn from_file(
+    pub fn unpack_file(
         &mut self,
         base_path: &Path,
         hash_code: &str,
