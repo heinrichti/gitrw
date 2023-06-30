@@ -4,7 +4,7 @@ use std::path::Path;
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
-use crate::gitrwlib::objs::{commit::Commit, git_objects::Tree, tag::Tag};
+use crate::objs::{commit::Commit, git_objects::Tree, tag::Tag};
 
 use super::{
     hash_content::Compression,

@@ -8,13 +8,13 @@ use std::path::Path;
 use memmap2::Mmap;
 use rustc_hash::FxHashMap;
 
-use super::hash_content::Compression;
-use super::idx_reader::get_pack_offsets;
-use super::objs::commit::Commit;
-use super::objs::git_objects::{GitObject, Tree};
-use super::objs::object_hash::ObjectHash;
-use super::objs::tag::Tag;
-use super::pack_diff::PackDiff;
+use crate::hash_content::Compression;
+use crate::idx_reader::get_pack_offsets;
+use crate::objs::commit::Commit;
+use crate::objs::git_objects::{GitObject, Tree};
+use crate::objs::object_hash::ObjectHash;
+use crate::objs::tag::Tag;
+use crate::pack_diff::PackDiff;
 
 #[derive(Debug)]
 struct Pack {

@@ -1,69 +1,47 @@
-use std::{
-    error::Error,
-    fmt::Display,
-    io::{BufWriter, Write},
-    path::PathBuf,
-};
+use std::{error::Error, path::PathBuf};
 
-use gitrwlib::repository::Repository;
-use rustc_hash::FxHashSet;
+use commits::{CommitsFifoIter, CommitsLifoIter};
+use hash_content::Compression;
+use objs::commit::Commit;
+use packreader::PackReader;
+use refs::GitRef;
 
-mod gitrwlib;
+mod commits;
+mod hash_content;
+mod idx_reader;
+mod pack_diff;
+mod packreader;
+mod refs;
 
-fn print_locked<T: Display>(items: impl Iterator<Item = T>) -> Result<(), Box<dyn Error>> {
-    let lock = std::io::stdout().lock();
-    let mut handle = BufWriter::new(lock);
+pub mod objs;
 
-    for item in items {
-        writeln!(handle, "{item}")?;
-    }
-
-    Ok(())
+pub struct Repository {
+    path: PathBuf,
+    pack_reader: PackReader,
+    compression: Compression,
 }
 
-pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut repository = Repository::create(repository_path);
-    let mut committers = FxHashSet::default();
+impl Repository {
+    pub fn create(path: PathBuf) -> Self {
+        let pack_reader = PackReader::create(&path).unwrap();
+        let compression = Compression::new();
 
-    for commit in repository.commits_lifo() {
-        committers.insert(commit.committer().to_owned());
-        committers.insert(commit.author().to_owned());
+        Repository {
+            path,
+            pack_reader,
+            compression,
+        }
     }
 
-    let mut committers: Vec<_> = committers.iter().collect();
-    committers.sort();
+    pub fn commits_ordered(&mut self) -> impl Iterator<Item = Commit> {
+        CommitsFifoIter::create(&self.path, &self.pack_reader, &mut self.compression)
+    }
 
-    print_locked(committers.into_iter())?;
+    pub fn commits_lifo(&mut self) -> impl Iterator<Item = Commit> {
+        CommitsLifoIter::create(&self.path, &self.pack_reader, &mut self.compression)
+    }
 
-    Ok(())
-}
-
-// pub fn print_tree(repository_path: &Path, object_hash: ObjectHash) -> Result<(), Box<dyn Error>> {
-//     let pack_reader = PackReader::create(repository_path)?;
-//     let mut compression = Compression::new();
-
-//     let obj = pack_reader
-//         .read_git_object(&mut compression, object_hash.clone());
-
-//     if obj.is_some() {
-//         match obj.unwrap() {
-//             GitObject::Tree(tree) => println!("{tree}"),
-//             _ => panic!(),
-//         };
-//     }
-//     else {
-//         if let Ok(bytes) = compression.from_file(repository_path, &object_hash.to_string()) {
-//             let tree = Tree::create(object_hash, bytes, true);
-//             println!("{tree}");
-//         } else { panic!() };
-//     }
-
-//     Ok(())
-// }
-
-pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut repository = Repository::create(repository_path);
-    print_locked(repository.commits_ordered())?;
-
-    Ok(())
+    pub fn _refs(&self) -> Result<Vec<GitRef>, Box<dyn Error>> {
+        GitRef::read_all(&self.path)
+    }
 }
