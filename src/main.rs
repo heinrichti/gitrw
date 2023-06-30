@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ArgGroup};
 
@@ -54,9 +54,9 @@ fn main() {
     let cli = Cli::parse();
     let repository_path = 
         if let Some(repository_path) = &cli.repository {
-            Path::new(repository_path)
+            PathBuf::from(repository_path)
         } else {
-            Path::new(".")
+            PathBuf::from(".")
         };
 
     match cli.command {

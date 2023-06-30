@@ -1,4 +1,4 @@
-use std::{error::Error, io::{Write, BufWriter}, path::Path, fmt::Display};
+use std::{error::Error, io::{Write, BufWriter}, path::PathBuf, fmt::Display};
 
 use gitrwlib::repository::Repository;
 use rustc_hash::FxHashSet;
@@ -16,7 +16,7 @@ fn print_locked<T: Display>(items: impl Iterator<Item = T>) -> Result<(), Box<dy
     Ok(())
 }
 
-pub fn list_contributors(repository_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let mut repository = Repository::create(repository_path);
     let mut committers = FxHashSet::default();
 
@@ -56,7 +56,7 @@ pub fn list_contributors(repository_path: &Path) -> Result<(), Box<dyn Error>> {
 //     Ok(())
 // }
 
-pub fn remove_empty_commits(repository_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let mut repository = Repository::create(repository_path);
     print_locked(repository.commits_ordered())?;
 

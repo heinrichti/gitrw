@@ -8,8 +8,6 @@ use crate::gitrwlib::objs::{commit::Commit, git_objects::Tree, tag::Tag};
 
 use super::{refs::GitRef, objs::{git_objects::{GitObject, TagTargetType}, object_hash::ObjectHash}, packreader::PackReader, hash_content::Compression};
 
-
-
 pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: &'a mut Compression,
