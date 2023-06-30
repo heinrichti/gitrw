@@ -1,12 +1,20 @@
 use core::panic;
-use std::{path::Path};
+use std::path::Path;
 
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
 use crate::gitrwlib::objs::{commit::Commit, git_objects::Tree, tag::Tag};
 
-use super::{refs::GitRef, objs::{git_objects::{GitObject, TagTargetType}, object_hash::ObjectHash}, packreader::PackReader, hash_content::Compression};
+use super::{
+    hash_content::Compression,
+    objs::{
+        git_objects::{GitObject, TagTargetType},
+        object_hash::ObjectHash,
+    },
+    packreader::PackReader,
+    refs::GitRef,
+};
 
 pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
@@ -18,7 +26,11 @@ pub struct CommitsFifoIter<'a> {
 }
 
 impl<'a> CommitsFifoIter<'a> {
-    pub fn create(repository_path: &'a Path, pack_reader: &'a PackReader, compression: &'a mut Compression) -> CommitsFifoIter<'a> {
+    pub fn create(
+        repository_path: &'a Path,
+        pack_reader: &'a PackReader,
+        compression: &'a mut Compression,
+    ) -> CommitsFifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
@@ -32,58 +44,60 @@ impl<'a> CommitsFifoIter<'a> {
         }
 
         let commits = commits
-        .into_iter()
-        .map(|git_object| match git_object {
-            GitObject::Commit(commit) => commit,
-            _ => panic!("this should have been a commit, but wasn't")
-        })
-        .collect();
+            .into_iter()
+            .map(|git_object| match git_object {
+                GitObject::Commit(commit) => commit,
+                _ => panic!("this should have been a commit, but wasn't"),
+            })
+            .collect();
 
-        CommitsFifoIter { 
-            pack_reader, 
-            compression, 
-            repository_path, 
-            commits, 
+        CommitsFifoIter {
+            pack_reader,
+            compression,
+            repository_path,
+            commits,
             processed_commits,
             parents_seen,
-         }
-
+        }
     }
 }
 
-impl<'a> Iterator for CommitsFifoIter<'a>  {
+impl<'a> Iterator for CommitsFifoIter<'a> {
     type Item = Commit<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
             if self.processed_commits.contains(&commit.object_hash) {
                 self.parents_seen.remove(&commit.object_hash);
-            } else if !self.parents_seen.insert(commit.object_hash.clone()) || commit.parents().is_empty() {
-                    self.processed_commits.insert(commit.object_hash.clone());
-                    return Some(commit);
+            } else if !self.parents_seen.insert(commit.object_hash.clone())
+                || commit.parents().is_empty()
+            {
+                self.processed_commits.insert(commit.object_hash.clone());
+                return Some(commit);
             } else {
                 let parents = commit.parents();
                 self.commits.push(commit);
                 for parent in parents {
                     if !self.processed_commits.contains(&parent) {
                         let parent_commit = read_object_from_hash(
-                            self.compression, 
-                            self.repository_path, 
-                            self.pack_reader, 
-                            parent).unwrap();
-                        
+                            self.compression,
+                            self.repository_path,
+                            self.pack_reader,
+                            parent,
+                        )
+                        .unwrap();
+
                         match parent_commit {
                             GitObject::Commit(pc) => self.commits.push(pc),
-                            _ => panic!("Commit expected, got something else.")
+                            _ => panic!("Commit expected, got something else."),
                         };
                     }
                 }
             }
         }
-            
+
         None
     }
-    
 }
 
 pub struct CommitsLifoIter<'a> {
@@ -95,7 +109,11 @@ pub struct CommitsLifoIter<'a> {
 }
 
 impl<'a> CommitsLifoIter<'a> {
-    pub fn create(repository_path: &'a Path, pack_reader: &'a PackReader, compression: &'a mut Compression) -> CommitsLifoIter<'a> {
+    pub fn create(
+        repository_path: &'a Path,
+        pack_reader: &'a PackReader,
+        compression: &'a mut Compression,
+    ) -> CommitsLifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
 

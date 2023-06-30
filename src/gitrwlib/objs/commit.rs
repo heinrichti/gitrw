@@ -1,4 +1,4 @@
-use std::{slice, marker::PhantomData, fmt::Display};
+use std::{fmt::Display, marker::PhantomData, slice};
 
 use bstr::{ByteSlice, Lines};
 
@@ -16,7 +16,7 @@ pub struct Commit<'a> {
     parents: Vec<(*const u8, usize)>,
     author_line: (*const u8, usize),
     committer_line: (*const u8, usize),
-    _phantom: PhantomData<&'a [u8]>
+    _phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> Display for Commit<'a> {
@@ -29,7 +29,7 @@ impl<'a> Display for Commit<'a> {
 impl<'a> Commit<'a> {
     pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
         let mut line_reader: Lines<'_>;
-        
+
         if skip_first_null {
             let mut null_idx = 0;
             for i in 0..bytes.len() {
@@ -76,8 +76,7 @@ impl<'a> Commit<'a> {
             parents,
             author_line,
             committer_line,
-            _phantom: PhantomData
-            // message,
+            _phantom: PhantomData, // message,
         }
     }
 

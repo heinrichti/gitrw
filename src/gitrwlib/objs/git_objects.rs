@@ -1,6 +1,6 @@
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::slice;
-use std::fmt::Display;
 
 use bstr::ByteSlice;
 
@@ -67,7 +67,7 @@ impl Display for Tree<'_> {
 struct TreeLine<'a> {
     hash: ObjectHash,
     text: (*const u8, usize),
-    _phantom: PhantomData<&'a [u8]>
+    _phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> Tree<'a> {
@@ -84,17 +84,19 @@ impl<'a> Tree<'a> {
         while let Some(null_terminator_index) = null_terminator_index_opt {
             let text = (
                 unsafe { bytes.as_ptr().add(position) },
-                null_terminator_index);
-                
-            let tree_hash: ObjectHash = 
-                bytes[position + null_terminator_index + 1..position + null_terminator_index + 21].into();
+                null_terminator_index,
+            );
+
+            let tree_hash: ObjectHash = bytes
+                [position + null_terminator_index + 1..position + null_terminator_index + 21]
+                .into();
 
             position += null_terminator_index + 21;
 
             lines.push(TreeLine {
                 hash: tree_hash,
                 text,
-                _phantom: PhantomData
+                _phantom: PhantomData,
             });
 
             null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');

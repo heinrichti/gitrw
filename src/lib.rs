@@ -1,4 +1,9 @@
-use std::{error::Error, io::{Write, BufWriter}, path::PathBuf, fmt::Display};
+use std::{
+    error::Error,
+    fmt::Display,
+    io::{BufWriter, Write},
+    path::PathBuf,
+};
 
 use gitrwlib::repository::Repository;
 use rustc_hash::FxHashSet;

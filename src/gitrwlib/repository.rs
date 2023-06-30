@@ -1,7 +1,7 @@
-use std::path::PathBuf;
 use std::error::Error;
+use std::path::PathBuf;
 
-use super::commit_walker::{CommitsLifoIter, CommitsFifoIter};
+use super::commit_walker::{CommitsFifoIter, CommitsLifoIter};
 use super::hash_content::Compression;
 use super::objs::commit::Commit;
 use super::packreader::PackReader;
@@ -10,7 +10,7 @@ use super::refs::GitRef;
 pub struct Repository {
     path: PathBuf,
     pack_reader: PackReader,
-    compression: Compression
+    compression: Compression,
 }
 
 impl Repository {
@@ -18,7 +18,11 @@ impl Repository {
         let pack_reader = PackReader::create(&path).unwrap();
         let compression = Compression::new();
 
-        Repository { path, pack_reader, compression }
+        Repository {
+            path,
+            pack_reader,
+            compression,
+        }
     }
 
     pub fn commits_ordered(&mut self) -> impl Iterator<Item = Commit> {

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand, ArgGroup};
+use clap::{ArgGroup, Parser, Subcommand};
 
 use mimalloc::MiMalloc;
 
@@ -21,7 +21,7 @@ enum Commands {
     #[command(subcommand)]
     Contributor(ContributorArgs),
 
-    /// Remove files and whole directories from the repository 
+    /// Remove files and whole directories from the repository
     #[command(group(ArgGroup::new("input")
                         .required(true)
                         .multiple(true)))]
@@ -32,36 +32,35 @@ enum Commands {
 
         /// Directory to remove. Argument can be specified multiple times
         #[arg(short, long, group = "input")]
-        directory: Option<Vec<String>>
+        directory: Option<Vec<String>>,
     },
 
     /// Remove empty commits that are no merge commits
-    PruneEmpty
+    PruneEmpty,
 }
 
 #[derive(Subcommand)]
 enum ContributorArgs {
     /// Lists all authors and committers
     List,
-    /// Allows to rewrite contributors 
+    /// Allows to rewrite contributors
     Rewrite {
         /// Format inside file: Old User <old@user.mail> = New User <new@user.mail>
-        mapping_file: String
-    }
+        mapping_file: String,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
-    let repository_path = 
-        if let Some(repository_path) = &cli.repository {
-            PathBuf::from(repository_path)
-        } else {
-            PathBuf::from(".")
-        };
+    let repository_path = if let Some(repository_path) = &cli.repository {
+        PathBuf::from(repository_path)
+    } else {
+        PathBuf::from(".")
+    };
 
     match cli.command {
         Commands::Contributor(args) => match args {
-            ContributorArgs::List => gitrw::list_contributors(repository_path).unwrap(), 
+            ContributorArgs::List => gitrw::list_contributors(repository_path).unwrap(),
             ContributorArgs::Rewrite { mapping_file: file } => {
                 println!("rewrite from file: {file}");
                 todo!();
@@ -81,7 +80,7 @@ fn main() {
             }
 
             todo!();
-        },
+        }
 
         Commands::PruneEmpty => {
             println!("Pruning empty commits");
