@@ -1,10 +1,10 @@
 use std::{error::Error, io::{Write, BufWriter}, path::Path};
 
-use commit_walker::{CommitWalker, SortedCommitWalker};
 use hash_content::Compression;
 use object_hash::ObjectHash;
 use objs::git_objects::{GitObject, Tree};
 use packreader::PackReader;
+use repository::Repository;
 use rustc_hash::FxHashSet;
 
 use crate::objs::git_objects;
@@ -17,13 +17,13 @@ mod objs;
 mod pack_diff;
 mod packreader;
 mod refs;
+mod repository;
 
 pub fn list_contributors(repository_path: &Path) -> Result<(), Box<dyn Error>> {
-    let commit_walker = CommitWalker::create(repository_path);
-
+    let mut repository = Repository::create(repository_path);
     let mut committers = FxHashSet::default();
 
-    for commit in commit_walker {
+    for commit in repository.commits_lifo() {
         committers.insert(commit.committer().to_owned());
         committers.insert(commit.author().to_owned());
     }
@@ -64,11 +64,12 @@ pub fn print_tree(repository_path: &Path, object_hash: ObjectHash) -> Result<(),
 }
 
 pub fn remove_empty_commits(repository_path: &Path) -> Result<(), Box<dyn Error>> {
-    let commit_walker = SortedCommitWalker::create(repository_path);
+    let mut repository = Repository::create(repository_path);
+    let commits = repository.commits_ordered();
 
     let lock = std::io::stdout().lock();
     let mut handle = BufWriter::new(lock);
-    for commit in commit_walker.into_iter() {
+    for commit in commits.into_iter() {
         writeln!(handle, "{0}", commit.object_hash)?;
     }
 

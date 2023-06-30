@@ -1,5 +1,5 @@
 use core::panic;
-use std::path::Path;
+use std::{path::Path};
 
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
@@ -12,23 +12,20 @@ use crate::{
     packreader::PackReader,
 };
 
-pub struct SortedCommitWalker<'a> {
-    pack_reader: PackReader,
-    compression: Compression,
+pub struct CommitsFifoIter<'a> {
+    pack_reader: &'a PackReader,
+    compression: &'a mut Compression,
     repository_path: &'a Path,
     commits: Vec<Commit<'a>>,
     processed_commits: FxHashSet<ObjectHash>,
     parents_seen: FxHashSet<ObjectHash>,
 }
 
-impl<'a> SortedCommitWalker<'a> {
-    pub fn create(repository_path: &Path) -> SortedCommitWalker {
+impl<'a> CommitsFifoIter<'a> {
+    pub fn create(repository_path: &'a Path, pack_reader: &'a PackReader, mut compression: &'a mut Compression) -> CommitsFifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
-
-        let pack_reader = PackReader::create(repository_path).unwrap();
-        let mut compression = Compression::new();
 
         let refs = crate::refs::GitRef::read_all(repository_path).unwrap();
         for r in refs {
@@ -46,7 +43,7 @@ impl<'a> SortedCommitWalker<'a> {
         })
         .collect();
 
-        SortedCommitWalker { 
+        CommitsFifoIter { 
             pack_reader, 
             compression, 
             repository_path, 
@@ -58,7 +55,7 @@ impl<'a> SortedCommitWalker<'a> {
     }
 }
 
-impl<'a> Iterator for SortedCommitWalker<'a>  {
+impl<'a> Iterator for CommitsFifoIter<'a>  {
     type Item = Commit<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -75,7 +72,7 @@ impl<'a> Iterator for SortedCommitWalker<'a>  {
                     for parent in parents {
                         if !self.processed_commits.contains(&parent) {
                             let parent_commit = read_object_from_hash(
-                                &mut self.compression, 
+                                self.compression, 
                                 self.repository_path, 
                                 &self.pack_reader, 
                                 parent).unwrap();
@@ -95,21 +92,18 @@ impl<'a> Iterator for SortedCommitWalker<'a>  {
     
 }
 
-pub struct CommitWalker<'a> {
-    pack_reader: PackReader,
-    compression: Compression,
+pub struct CommitsLifoIter<'a> {
+    pack_reader: &'a PackReader,
+    compression: &'a mut Compression,
     repository_path: &'a Path,
     commits: Vec<Commit<'a>>,
     processed_commits: FxHashSet<ObjectHash>,
 }
 
-impl<'a> CommitWalker<'a> {
-    pub fn create(repository_path: &Path) -> CommitWalker {
+impl<'a> CommitsLifoIter<'a> {
+    pub fn create(repository_path: &'a Path, pack_reader: &'a PackReader, mut compression: &'a mut Compression) -> CommitsLifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
-
-        let pack_reader = PackReader::create(repository_path).unwrap();
-        let mut compression = Compression::new();
 
         let refs = crate::refs::GitRef::read_all(repository_path).unwrap();
         for r in refs {
@@ -127,7 +121,7 @@ impl<'a> CommitWalker<'a> {
             })
             .collect();
 
-        CommitWalker {
+        CommitsLifoIter {
             pack_reader,
             repository_path,
             commits,
@@ -137,7 +131,7 @@ impl<'a> CommitWalker<'a> {
     }
 }
 
-impl<'a> Iterator for CommitWalker<'a> {
+impl<'a> Iterator for CommitsLifoIter<'a> {
     type Item = Commit<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -145,7 +139,7 @@ impl<'a> Iterator for CommitWalker<'a> {
             if self.processed_commits.insert(commit.object_hash.clone()) {
                 for parent in commit.parents() {
                     if let Some(parent_commit) = read_object_from_hash(
-                        &mut self.compression,
+                        self.compression,
                         self.repository_path,
                         &self.pack_reader,
                         parent,
@@ -194,12 +188,12 @@ fn read_commit_from_ref<'a>(
     None
 }
 
-fn read_object_from_hash<'a>(
-    compression: &mut Compression,
+fn read_object_from_hash<'a, 'b>(
+    compression: &'a mut Compression,
     repository_path: &Path,
     pack_reader: &PackReader,
     hash: ObjectHash,
-) -> Option<GitObject<'a>> {
+) -> Option<GitObject<'b>> {
     if let Some(obj) = pack_reader.read_git_object(compression, hash.clone()) {
         return Some(obj);
     }
