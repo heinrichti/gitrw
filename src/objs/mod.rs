@@ -9,7 +9,7 @@ mod tag;
 
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub struct ObjectHash {
-    _bytes: [u8; 20],
+    bytes: [u8; 20],
 }
 
 #[derive(Debug)]

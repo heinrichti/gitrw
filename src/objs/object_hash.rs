@@ -9,23 +9,19 @@ use super::ObjectHash;
 
 impl Display for ObjectHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(hex::encode(self._bytes).as_str())?;
+        f.write_str(hex::encode(self.bytes).as_str())?;
         Ok(())
     }
 }
 
 impl std::fmt::Debug for ObjectHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_str(hex::encode(self._bytes).as_str())?;
+        f.write_str(hex::encode(self.bytes).as_str())?;
         Ok(())
     }
 }
 
 impl ObjectHash {
-    pub fn new(bytes: [u8; 20]) -> ObjectHash {
-        ObjectHash { _bytes: bytes }
-    }
-
     fn from_bstr(hash: &BStr) -> ObjectHash {
         assert_eq!(hash.len(), 40);
 
@@ -36,7 +32,7 @@ impl ObjectHash {
             );
         }
 
-        ObjectHash::new(unsafe { mem::transmute(bytes) })
+        ObjectHash::from(unsafe { mem::transmute::<_, [u8; 20]>(bytes) })
     }
 }
 
@@ -46,7 +42,7 @@ impl From<&[u8]> for ObjectHash {
 
         let mut buf = [0u8; 20];
         buf.copy_from_slice(value);
-        ObjectHash::new(buf)
+        ObjectHash::from(buf)
     }
 }
 
@@ -59,6 +55,12 @@ impl From<&BStr> for ObjectHash {
 impl From<BString> for ObjectHash {
     fn from(value: BString) -> Self {
         ObjectHash::from_bstr(value.as_bstr())
+    }
+}
+
+impl From<[u8; 20]> for ObjectHash {
+    fn from(value: [u8; 20]) -> Self {
+        ObjectHash { bytes: value }
     }
 }
 
