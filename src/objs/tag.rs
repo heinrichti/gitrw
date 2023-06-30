@@ -2,19 +2,9 @@ use std::slice;
 
 use bstr::ByteSlice;
 
-use super::{git_objects::TagTargetType, object_hash::ObjectHash};
+use crate::objs::TagTargetType;
 
-#[derive(Debug)]
-pub struct Tag {
-    // object_hash: ObjectHash,
-    _bytes: Box<[u8]>,
-    // object: Range<usize>,
-    // obj_type: Range<usize>,
-    object: (*const u8, usize),
-    obj_type: (*const u8, usize), // tag: Range<usize>,
-                                  // tagger: Range<usize>,
-                                  // message: Range<usize>
-}
+use super::{ObjectHash, Tag};
 
 impl Tag {
     pub fn create(_object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tag {

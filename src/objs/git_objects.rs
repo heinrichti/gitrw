@@ -4,18 +4,9 @@ use std::slice;
 
 use bstr::ByteSlice;
 
-use super::object_hash::ObjectHash;
-use super::tag::Tag;
+use super::ObjectHash;
 
-use super::commit::Commit;
-
-#[derive(Debug)]
-pub enum GitObject<'a> {
-    Commit(Commit<'a>),
-    Tree(Tree<'a>),
-    // Blob(Blob),
-    Tag(Tag),
-}
+use super::Tree;
 
 // pub struct Blob { object_hash: ObjectHash }
 
@@ -36,19 +27,6 @@ pub enum GitObject<'a> {
 //     }
 // }
 
-#[derive(PartialEq, Eq)]
-pub enum TagTargetType {
-    Commit,
-    Tree,
-}
-
-#[derive(Debug)]
-pub struct Tree<'a> {
-    _object_hash: ObjectHash,
-    lines: Vec<TreeLine<'a>>,
-    _bytes: Box<[u8]>,
-}
-
 impl Display for Tree<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.lines.iter() {
@@ -64,7 +42,7 @@ impl Display for Tree<'_> {
 }
 
 #[derive(Debug)]
-struct TreeLine<'a> {
+pub struct TreeLine<'a> {
     hash: ObjectHash,
     text: (*const u8, usize),
     _phantom: PhantomData<&'a [u8]>,

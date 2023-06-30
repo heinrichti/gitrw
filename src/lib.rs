@@ -2,7 +2,7 @@ use std::{error::Error, path::PathBuf};
 
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use hash_content::Compression;
-use objs::commit::Commit;
+use objs::Commit;
 use packreader::PackReader;
 use refs::GitRef;
 

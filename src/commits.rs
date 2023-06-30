@@ -4,13 +4,12 @@ use std::path::Path;
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
-use crate::objs::{commit::Commit, git_objects::Tree, tag::Tag};
+use crate::objs::{Commit, Tag, Tree};
 
 use super::{
     hash_content::Compression,
     objs::{
-        git_objects::{GitObject, TagTargetType},
-        object_hash::ObjectHash,
+        ObjectHash, {GitObject, TagTargetType},
     },
     packreader::PackReader,
     refs::GitRef,

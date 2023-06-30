@@ -10,10 +10,9 @@ use rustc_hash::FxHashMap;
 
 use crate::hash_content::Compression;
 use crate::idx_reader::get_pack_offsets;
-use crate::objs::commit::Commit;
-use crate::objs::git_objects::{GitObject, Tree};
-use crate::objs::object_hash::ObjectHash;
-use crate::objs::tag::Tag;
+use crate::objs::ObjectHash;
+use crate::objs::Tag;
+use crate::objs::{Commit, GitObject, Tree};
 use crate::pack_diff::PackDiff;
 
 #[derive(Debug)]

@@ -1,15 +1,11 @@
 use std::{
     fmt::Display,
-    hash::Hash,
     mem::{self, MaybeUninit},
 };
 
 use bstr::{BStr, BString, ByteSlice};
 
-#[derive(Eq, PartialEq, Clone, Hash)]
-pub struct ObjectHash {
-    _bytes: [u8; 20],
-}
+use super::ObjectHash;
 
 impl Display for ObjectHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
