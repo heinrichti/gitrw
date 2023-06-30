@@ -1,8 +1,11 @@
 use std::{path::Path};
 use std::error::Error;
 
-use crate::commit_walker::CommitsLifoIter;
-use crate::{packreader::PackReader, hash_content::Compression, commit_walker::CommitsFifoIter, objs::commit::Commit};
+use super::commit_walker::{CommitsLifoIter, CommitsFifoIter};
+use super::hash_content::Compression;
+use super::objs::commit::Commit;
+use super::packreader::PackReader;
+use super::refs::GitRef;
 
 pub struct Repository<'a> {
     path: &'a Path,
@@ -26,7 +29,7 @@ impl<'a> Repository<'a> {
         CommitsLifoIter::create(self.path, &self.pack_reader, &mut self.compression)
     }
 
-    pub fn _refs(&self) -> Result<Vec<crate::refs::GitRef>, Box<dyn Error>> {
-        crate::refs::GitRef::read_all(self.path)
+    pub fn _refs(&self) -> Result<Vec<GitRef>, Box<dyn Error>> {
+        GitRef::read_all(self.path)
     }
 }

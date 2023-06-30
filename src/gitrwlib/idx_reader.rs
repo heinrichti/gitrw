@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use crate::object_hash::ObjectHash;
+use super::objs::object_hash::ObjectHash;
 
 const HEADER_LEN: usize = 8;
 const HASH_LEN: usize = 20;

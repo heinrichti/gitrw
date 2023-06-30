@@ -2,7 +2,7 @@ use std::slice;
 
 use bstr::ByteSlice;
 
-use crate::{git_objects::TagTargetType, object_hash::ObjectHash};
+use super::{object_hash::ObjectHash, git_objects::TagTargetType};
 
 #[derive(Debug)]
 pub struct Tag {

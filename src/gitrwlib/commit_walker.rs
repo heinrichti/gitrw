@@ -4,13 +4,11 @@ use std::{path::Path};
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
-use crate::{
-    git_objects::{GitObject, TagTargetType, Tree},
-    hash_content::Compression,
-    object_hash::ObjectHash,
-    objs::{commit::Commit, tag::Tag},
-    packreader::PackReader,
-};
+use crate::gitrwlib::objs::{commit::Commit, git_objects::Tree, tag::Tag};
+
+use super::{refs::GitRef, objs::{git_objects::{GitObject, TagTargetType}, object_hash::ObjectHash}, packreader::PackReader, hash_content::Compression};
+
+
 
 pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
@@ -27,7 +25,7 @@ impl<'a> CommitsFifoIter<'a> {
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
 
-        let refs = crate::refs::GitRef::read_all(repository_path).unwrap();
+        let refs = GitRef::read_all(repository_path).unwrap();
         for r in refs {
             let commit = read_commit_from_ref(&mut compression, repository_path, &pack_reader, r);
             if let Some(x) = commit {
@@ -105,7 +103,7 @@ impl<'a> CommitsLifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
 
-        let refs = crate::refs::GitRef::read_all(repository_path).unwrap();
+        let refs = GitRef::read_all(repository_path).unwrap();
         for r in refs {
             let commit = read_commit_from_ref(&mut compression, repository_path, &pack_reader, r);
             if let Some(x) = commit {
@@ -163,11 +161,11 @@ fn read_commit_from_ref<'a>(
     compression: &mut Compression,
     repository_path: &Path,
     pack_reader: &PackReader,
-    r: crate::refs::GitRef,
+    r: GitRef,
 ) -> Option<GitObject<'a>> {
     let hash = match r {
-        crate::refs::GitRef::Simple(simple) => simple.hash,
-        crate::refs::GitRef::Tag(tag) => tag.hash,
+        GitRef::Simple(simple) => simple.hash,
+        GitRef::Tag(tag) => tag.hash,
     };
 
     let mut git_object =

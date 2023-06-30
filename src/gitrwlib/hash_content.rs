@@ -9,7 +9,7 @@ use flate2::Status;
 use libdeflater::Decompressor;
 use memmap2::Mmap;
 
-use crate::packreader::PackObject;
+use crate::gitrwlib::packreader::PackObject;
 
 pub struct Compression {
     libdeflate_decompressor: Decompressor,

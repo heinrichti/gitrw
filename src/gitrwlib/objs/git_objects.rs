@@ -4,8 +4,8 @@ use std::fmt::Display;
 
 use bstr::ByteSlice;
 
-use crate::object_hash::ObjectHash;
-use crate::objs::tag::Tag;
+use super::object_hash::ObjectHash;
+use super::tag::Tag;
 
 use super::commit::Commit;
 

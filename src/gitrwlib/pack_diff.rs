@@ -1,6 +1,6 @@
 use memmap2::Mmap;
 
-use crate::{hash_content::Compression, packreader::PackObject};
+use super::{hash_content::Compression, packreader::PackObject};
 
 pub struct CopyInstruction {
     offset: usize,

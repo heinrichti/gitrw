@@ -1,8 +1,8 @@
-use std::{slice, marker::PhantomData};
+use std::{slice, marker::PhantomData, fmt::Display};
 
 use bstr::{ByteSlice, Lines};
 
-use crate::object_hash::ObjectHash;
+use super::object_hash::ObjectHash;
 
 #[derive(Debug)]
 pub struct Commit<'a> {
@@ -17,6 +17,13 @@ pub struct Commit<'a> {
     author_line: (*const u8, usize),
     committer_line: (*const u8, usize),
     _phantom: PhantomData<&'a [u8]>
+}
+
+impl<'a> Display for Commit<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.object_hash))?;
+        Ok(())
+    }
 }
 
 impl<'a> Commit<'a> {
