@@ -229,7 +229,7 @@ fn read_object_from_hash<'a>(
         }
 
         if bytes.starts_with(b"blob ") {
-            panic!()
+            todo!("Not implemented yet")
             // return Some(GitObject::Blob(Blob::create(hash, bytes)));
         }
 

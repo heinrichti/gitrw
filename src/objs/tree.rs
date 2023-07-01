@@ -8,6 +8,13 @@ use super::{ObjectHash, Tree, TreeHash};
 
 impl<'a> Tree<'a> {
     pub fn create(object_hash: TreeHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree<'a> {
+        let mut result = Tree {
+            _object_hash: object_hash,
+            lines: vec![],
+            _bytes: bytes,
+        };
+
+        let bytes = &result._bytes;
         let mut position = 0;
 
         if skip_first_null {
@@ -35,11 +42,8 @@ impl<'a> Tree<'a> {
             null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');
         }
 
-        Tree {
-            _object_hash: object_hash,
-            lines,
-            _bytes: bytes,
-        }
+        result.lines = lines;
+        result
     }
 }
 
