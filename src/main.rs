@@ -115,7 +115,7 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
     let mut committers: Vec<_> = committers.iter().collect();
     committers.sort();
 
-    print_locked(committers.into_iter())?;
+    print_locked(committers.iter().into_iter())?;
 
     Ok(())
 }
@@ -145,7 +145,8 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 
 pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let mut repository = Repository::create(repository_path);
-    print_locked(repository.commits_ordered())?;
+    print_locked(repository.commits_ordered()
+        .map(|commit| commit.tree()))?;
 
     Ok(())
 }

@@ -23,14 +23,14 @@ impl<'a> Commit<'a> {
                     break;
                 }
             }
-            line_reader = bytes[null_idx..].lines();
+            line_reader = bytes[null_idx+1..].lines();
         } else {
             line_reader = bytes.lines();
         }
 
-        // skipping the tree for now
-        line_reader.next();
-        // let tree = line_reader.next().map(|x| x.start + 5..x.end).unwrap();
+        let tree_line = line_reader.next().map(|line| 
+            (unsafe { line.as_ptr().add(5) }, line.len() - 5)).unwrap();
+
         let mut parents = Vec::with_capacity(1);
         let mut line = line_reader.next().unwrap();
         while line.starts_with(b"parent ") {
@@ -40,34 +40,32 @@ impl<'a> Commit<'a> {
         let author_line = (unsafe { line.as_ptr().add(7) }, line.len() - 7);
         let committer_line = line_reader
             .next()
-            .map(|c| (unsafe { c.as_ptr().add(10) }, c.len() - 10))
+            .map(|line| (unsafe { line.as_ptr().add(10) }, line.len() - 10))
             .unwrap();
 
-        // while {
-        //     line = line_reader.next().unwrap();
-        //     line.count() != 0
-        // } {}
-
-        // let message = if let Some(line) = line_reader.next() {
-        //     line.start..bytes.len()
-        // } else {
-        //     0..0
-        // };
+        dbg!(&object_hash);
+        let remainder = unsafe { committer_line.0.add(committer_line.1 + 1) };
+        let tmp = unsafe { bytes.as_ptr().add(bytes.len()).offset_from(remainder) };
+        dbg!(tmp);
+        let remainder_len: usize = unsafe { bytes.as_ptr().add(bytes.len()).offset_from(remainder) }
+            .try_into().unwrap();
 
         Commit {
             object_hash,
             _bytes: bytes,
-            // tree,
+            tree_line,
             parents,
             author_line,
             committer_line,
-            _phantom: PhantomData, // message,
+            remainder: (remainder, remainder_len),
+            _phantom: PhantomData,
         }
     }
 
-    // pub fn tree(&self) -> &bstr::BStr {
-    //     &self.bytes[self.tree.clone()].as_bstr()
-    // }
+    pub fn tree(&self) -> ObjectHash {
+        unsafe { std::slice::from_raw_parts(self.tree_line.0, self.tree_line.1) }
+            .as_bstr().try_into().unwrap()
+    }
 
     pub fn parents(&self) -> Vec<ObjectHash> {
         let mut result = Vec::with_capacity(self.parents.len());
@@ -78,10 +76,6 @@ impl<'a> Commit<'a> {
 
         result
     }
-
-    // pub fn message(&self) -> &bstr::BStr {
-    //     &self.bytes[self.message.clone()].as_bstr()
-    // }
 
     pub fn author(&self) -> &'a bstr::BStr {
         Commit::contributor(unsafe {

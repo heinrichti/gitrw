@@ -16,14 +16,11 @@ pub struct ObjectHash {
 pub struct Commit<'a> {
     pub object_hash: ObjectHash,
     _bytes: Box<[u8]>,
-    // tree: Range<usize>,
-    // parents: Box<[Range<usize>]>,
-    // author_line: Range<usize>,
-    // committer_line: Range<usize>,
-    // message: Range<usize>,
+    tree_line: (*const u8, usize),
     parents: Vec<(*const u8, usize)>,
     author_line: (*const u8, usize),
     committer_line: (*const u8, usize),
+    remainder: (*const u8, usize),
     _phantom: PhantomData<&'a [u8]>,
 }
 
