@@ -1,23 +1,31 @@
-use std::slice;
+use std::ops::Deref;
 
 use bstr::ByteSlice;
 
-use crate::objs::TagTargetType;
+use crate::{objs::TagTargetType, shared::RefSlice};
 
 use super::{ObjectHash, Tag};
 
-impl Tag {
-    pub fn create(_object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tag {
+impl<'a> Tag<'a> {
+    pub fn create(_object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tag<'a> {
+        let mut tag = Tag {
+            _bytes: bytes,
+            object: RefSlice::Owned(vec![]),
+            obj_type: RefSlice::Owned(vec![]),
+        };
+
+        let bytes = &tag._bytes;
+
         let mut line_reader = bytes.lines();
         if skip_first_null {
             line_reader.next();
         };
 
         let line = line_reader.next().unwrap();
-        let object = (unsafe { line.as_ptr().add(7) }, line.len() - 7);
+        let object = RefSlice::from_slice(&line[7..]);
 
         let line = line_reader.next().unwrap();
-        let obj_type = (unsafe { line.as_ptr().add(5) }, line.len() - 5);
+        let obj_type = RefSlice::from_slice(&line[5..]);
 
         // let line = line_reader.next().unwrap();
 
@@ -37,23 +45,17 @@ impl Tag {
         //     }
         // }
 
-        // Tag { object_hash, bytes, object, obj_type, tag, tagger, message }
-        Tag {
-            _bytes: bytes,
-            object,
-            obj_type,
-        }
+        tag.object = object;
+        tag.obj_type = obj_type;
+        tag
     }
 
     pub fn object(&self) -> ObjectHash {
-        unsafe { slice::from_raw_parts(self.object.0, self.object.1) }
-            .as_bstr()
-            .try_into()
-            .unwrap()
+        self.object.as_bstr().try_into().unwrap()
     }
 
     pub fn target_type(&self) -> TagTargetType {
-        let target = unsafe { slice::from_raw_parts(self.obj_type.0, self.obj_type.1) };
+        let target = self.obj_type.deref();
 
         if target == b"commit" {
             return TagTargetType::Commit;

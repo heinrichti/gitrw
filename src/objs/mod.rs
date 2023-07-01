@@ -24,15 +24,15 @@ pub struct Commit<'a> {
 }
 
 #[derive(Debug)]
-pub struct Tag {
+pub struct Tag<'a> {
     // object_hash: ObjectHash,
     _bytes: Box<[u8]>,
     // object: Range<usize>,
     // obj_type: Range<usize>,
-    object: (*const u8, usize),
-    obj_type: (*const u8, usize), // tag: Range<usize>,
-                                  // tagger: Range<usize>,
-                                  // message: Range<usize>
+    object: RefSlice<'a, u8>,
+    obj_type: RefSlice<'a, u8>, // tag: Range<usize>,
+                                // tagger: Range<usize>,
+                                // message: Range<usize>
 }
 
 #[derive(Debug)]
@@ -40,7 +40,7 @@ pub enum GitObject<'a> {
     Commit(Commit<'a>),
     Tree(Tree<'a>),
     // Blob(Blob),
-    Tag(Tag),
+    Tag(Tag<'a>),
 }
 
 #[derive(PartialEq, Eq)]

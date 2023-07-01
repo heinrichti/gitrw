@@ -1,6 +1,6 @@
-use std::{fmt::Display, vec};
+use std::{fmt::Display, ops::Deref, vec};
 
-use bstr::{ByteSlice, Lines, ByteVec};
+use bstr::{ByteSlice, ByteVec, Lines};
 
 use crate::shared::RefSlice;
 
@@ -23,7 +23,7 @@ impl<'a> Commit<'a> {
             parents: vec![],
             author_line: RefSlice::Owned(vec![]),
             committer_line: RefSlice::Owned(vec![]),
-            _remainder: RefSlice::Owned(vec![])
+            _remainder: RefSlice::Owned(vec![]),
         };
 
         let bytes = &commit._bytes;
@@ -127,34 +127,41 @@ impl<'a> Commit<'a> {
 
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut result: Vec<u8> = Vec::with_capacity(
-            b"tree \n".len() + self.tree_line.len() +
-            self.parents.iter().map(|parent| b"parent \n".len() + parent.len()).sum::<usize>() +
-            b"author \n".len() + self.committer_line.len() +
-            b"committer \n".len() + self.author_line.len() +
-            self._remainder.len()
+            b"tree \n".len()
+                + self.tree_line.len()
+                + self
+                    .parents
+                    .iter()
+                    .map(|parent| b"parent \n".len() + parent.len())
+                    .sum::<usize>()
+                + b"author \n".len()
+                + self.committer_line.len()
+                + b"committer \n".len()
+                + self.author_line.len()
+                + self._remainder.len(),
         );
 
         dbg!(result.capacity());
 
         result.push_str(b"tree ");
-        result.push_str(&*self.tree_line);
+        result.push_str(self.tree_line.deref());
         result.push_str(b"\n");
 
         for parent in &self.parents {
             result.push_str(b"parent ");
-            result.push_str(&**parent);
+            result.push_str(parent.deref());
             result.push_str(b"\n");
         }
 
         result.push_str(b"author ");
-        result.push_str(&*self.author_line);
+        result.push_str(self.author_line.deref());
         result.push_str(b"\n");
 
         result.push_str(b"committer ");
-        result.push_str(&*self.committer_line);
+        result.push_str(self.committer_line.deref());
         result.push_str(b"\n");
 
-        result.push_str(&*self._remainder);
+        result.push_str(self._remainder.deref());
 
         result.into_boxed_slice()
     }

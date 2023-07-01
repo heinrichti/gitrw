@@ -1,8 +1,9 @@
 use std::fmt::Display;
-use std::marker::PhantomData;
-use std::slice;
 
 use bstr::ByteSlice;
+
+use crate::shared;
+use crate::shared::RefSlice;
 
 use super::ObjectHash;
 
@@ -30,12 +31,7 @@ use super::Tree;
 impl Display for Tree<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.lines.iter() {
-            writeln!(
-                f,
-                "{} {}",
-                line.hash,
-                unsafe { slice::from_raw_parts(line.text.0, line.text.1) }.as_bstr(),
-            )?;
+            writeln!(f, "{} {}", line.hash, line.text.as_bstr())?;
         }
         Ok(())
     }
@@ -44,8 +40,7 @@ impl Display for Tree<'_> {
 #[derive(Debug)]
 pub struct TreeLine<'a> {
     hash: ObjectHash,
-    text: (*const u8, usize),
-    _phantom: PhantomData<&'a [u8]>,
+    text: shared::RefSlice<'a, u8>,
 }
 
 impl<'a> Tree<'a> {
@@ -60,10 +55,7 @@ impl<'a> Tree<'a> {
         let mut lines = Vec::new();
 
         while let Some(null_terminator_index) = null_terminator_index_opt {
-            let text = (
-                unsafe { bytes.as_ptr().add(position) },
-                null_terminator_index,
-            );
+            let text = RefSlice::from_slice(&bytes[position..position + null_terminator_index]);
 
             let tree_hash: ObjectHash = bytes
                 [position + null_terminator_index + 1..position + null_terminator_index + 21]
@@ -75,7 +67,6 @@ impl<'a> Tree<'a> {
             lines.push(TreeLine {
                 hash: tree_hash,
                 text,
-                _phantom: PhantomData,
             });
 
             null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');

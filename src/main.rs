@@ -161,7 +161,14 @@ mod tests {
 
     #[test]
     fn miri_commit() {
-        let commit = Commit::create(b"53dd2e51161a4eebd8baacd17383c9af35a8283e".as_bstr().try_into().unwrap(), BYTES.into(), false);
+        let commit = Commit::create(
+            b"53dd2e51161a4eebd8baacd17383c9af35a8283e"
+                .as_bstr()
+                .try_into()
+                .unwrap(),
+            BYTES.into(),
+            false,
+        );
         let b = commit.to_bytes();
 
         assert_eq!(BYTES.to_vec().into_boxed_slice(), b);
