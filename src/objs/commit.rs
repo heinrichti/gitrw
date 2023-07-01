@@ -1,4 +1,4 @@
-use std::{fmt::Display};
+use std::{fmt::Display, vec};
 
 use bstr::{ByteSlice, Lines};
 
@@ -16,6 +16,17 @@ impl<'a> Display for Commit<'a> {
 impl<'a> Commit<'a> {
     pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
         let mut line_reader: Lines<'_>;
+        let mut commit = Commit {
+            object_hash,
+            _bytes: bytes,
+            tree_line: RefSlice::Owned(vec![]),
+            parents: vec![],
+            author_line: RefSlice::Owned(vec![]),
+            committer_line: RefSlice::Owned(vec![]),
+            _remainder: RefSlice::Owned(vec![])
+        };
+
+        let bytes = &commit._bytes;
 
         if skip_first_null {
             let mut null_idx = 0;
@@ -43,6 +54,7 @@ impl<'a> Commit<'a> {
         }
 
         let author_line = RefSlice::from_slice(&line[7..]);
+
         let committer_line = line_reader
             .next()
             .map(|line| RefSlice::from_slice(&line[10..]))
@@ -55,15 +67,13 @@ impl<'a> Commit<'a> {
         let remainder_start: usize = committer_line_start + committer_line.len() + 1;
         let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
 
-        Commit {
-            object_hash,
-            _bytes: bytes,
-            tree_line,
-            parents,
-            author_line,
-            committer_line,
-            _remainder: remainder,
-        }
+        commit.tree_line = tree_line;
+        commit.parents = parents;
+        commit.author_line = author_line;
+        commit.committer_line = committer_line;
+        commit._remainder = remainder;
+
+        commit
     }
 
     pub fn tree(&self) -> ObjectHash {

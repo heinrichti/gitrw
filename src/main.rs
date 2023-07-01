@@ -2,10 +2,12 @@ use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
 use gitrw::Repository;
+#[cfg(not(test))]
 use mimalloc::MiMalloc;
 use rustc_hash::FxHashSet;
 use std::io::Write;
 
+#[cfg(not(test))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -148,4 +150,23 @@ pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Erro
     print_locked(repository.commits_ordered().map(|commit| commit.tree()))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bstr::ByteSlice;
+    use gitrw::objs::Commit;
+
+    #[test]
+    fn miri_commit() {
+        let bytes = b"tree 31aa860596f003d69b896943677e9fe5ff208233\nparent 5eec99927bb6058c8180e5dac871c89c7d01b0ab\nauthor Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688207675 +0200\ncommitter Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688209149 +0200\n\nChanging of commit data".to_vec().into_boxed_slice();
+
+        let mut commit = Commit::create(b"53dd2e51161a4eebd8baacd17383c9af35a8283e".as_bstr().try_into().unwrap(), bytes, false);
+
+        println!("{}", commit.author());
+
+        commit.set_author(b"new author".to_vec());
+
+        println!("{}", commit.author());
+    }
 }
