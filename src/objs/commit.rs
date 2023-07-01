@@ -1,10 +1,30 @@
 use std::{fmt::Display, ops::Deref, vec};
 
-use bstr::{ByteSlice, ByteVec, Lines};
+use bstr::{BStr, ByteSlice, ByteVec, Lines};
 
 use crate::shared::RefSlice;
 
-use super::{Commit, ObjectHash};
+use super::{Commit, CommitHash, ObjectHash, TreeHash};
+
+impl Display for CommitHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.0))
+    }
+}
+
+impl From<ObjectHash> for CommitHash {
+    fn from(value: ObjectHash) -> Self {
+        CommitHash(value)
+    }
+}
+
+impl TryFrom<&BStr> for CommitHash {
+    type Error = &'static str;
+
+    fn try_from(value: &BStr) -> Result<Self, Self::Error> {
+        ObjectHash::try_from_bstr(value)
+    }
+}
 
 impl<'a> Display for Commit<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -14,7 +34,7 @@ impl<'a> Display for Commit<'a> {
 }
 
 impl<'a> Commit<'a> {
-    pub fn create(object_hash: ObjectHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
+    pub fn create(object_hash: CommitHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
         let mut line_reader: Lines<'_>;
         let mut commit = Commit {
             object_hash,
@@ -76,15 +96,15 @@ impl<'a> Commit<'a> {
         commit
     }
 
-    pub fn tree(&self) -> ObjectHash {
+    pub fn tree(&self) -> TreeHash {
         self.tree_line.as_bstr().try_into().unwrap()
     }
 
-    pub fn set_tree(&mut self, value: ObjectHash) {
+    pub fn set_tree(&mut self, value: TreeHash) {
         self.tree_line = RefSlice::from(value.to_string().as_bytes().to_vec());
     }
 
-    pub fn parents(&self) -> Vec<ObjectHash> {
+    pub fn parents(&self) -> Vec<CommitHash> {
         let mut result = Vec::with_capacity(self.parents.len());
         for parent in self.parents.iter() {
             result.push(parent.as_bstr().try_into().unwrap());

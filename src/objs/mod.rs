@@ -1,20 +1,20 @@
-use crate::shared::RefSlice;
+use crate::shared::{ObjectHash, RefSlice};
 
-use self::git_objects::TreeLine;
+use self::tree::TreeLine;
 
 mod commit;
-mod git_objects;
-mod object_hash;
 mod tag;
+mod tree;
 
-#[derive(Eq, PartialEq, Clone, Hash)]
-pub struct ObjectHash {
-    bytes: [u8; 20],
-}
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct TreeHash(ObjectHash);
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct CommitHash(pub(crate) ObjectHash);
 
 #[derive(Debug)]
 pub struct Commit<'a> {
-    pub object_hash: ObjectHash,
+    pub object_hash: CommitHash,
     _bytes: Box<[u8]>,
     tree_line: RefSlice<'a, u8>,
     parents: Vec<RefSlice<'a, u8>>,
@@ -51,7 +51,7 @@ pub enum TagTargetType {
 
 #[derive(Debug)]
 pub struct Tree<'a> {
-    _object_hash: ObjectHash,
+    _object_hash: TreeHash,
     lines: Vec<TreeLine<'a>>,
     _bytes: Box<[u8]>,
 }

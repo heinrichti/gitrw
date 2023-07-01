@@ -4,13 +4,14 @@ use std::path::Path;
 use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
-use crate::objs::{Commit, Tag, Tree};
+use crate::{
+    objs::{Commit, CommitHash, Tag, Tree},
+    shared::ObjectHash,
+};
 
 use super::{
     compression::Compression,
-    objs::{
-        ObjectHash, {GitObject, TagTargetType},
-    },
+    objs::{GitObject, TagTargetType},
     packreader::PackReader,
     refs::GitRef,
 };
@@ -20,8 +21,8 @@ pub struct CommitsFifoIter<'a> {
     compression: &'a mut Compression,
     repository_path: &'a Path,
     commits: Vec<Commit<'a>>,
-    processed_commits: FxHashSet<ObjectHash>,
-    parents_seen: FxHashSet<ObjectHash>,
+    processed_commits: FxHashSet<CommitHash>,
+    parents_seen: FxHashSet<CommitHash>,
 }
 
 impl<'a> CommitsFifoIter<'a> {
@@ -82,7 +83,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
                             self.compression,
                             self.repository_path,
                             self.pack_reader,
-                            parent,
+                            parent.0,
                         )
                         .unwrap();
 
@@ -104,7 +105,7 @@ pub struct CommitsLifoIter<'a> {
     compression: &'a mut Compression,
     repository_path: &'a Path,
     commits: Vec<Commit<'a>>,
-    processed_commits: FxHashSet<ObjectHash>,
+    processed_commits: FxHashSet<CommitHash>,
 }
 
 impl<'a> CommitsLifoIter<'a> {
@@ -153,7 +154,7 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
                         self.compression,
                         self.repository_path,
                         self.pack_reader,
-                        parent,
+                        parent.0,
                     ) {
                         match parent_commit {
                             GitObject::Commit(parent) => self.commits.push(parent),
@@ -216,11 +217,11 @@ fn read_object_from_hash<'a>(
 
     if let Ok(bytes) = compression.unpack_file(repository_path, &hash.to_string()) {
         if bytes.starts_with(b"commit ") {
-            return Some(GitObject::Commit(Commit::create(hash, bytes, true)));
+            return Some(GitObject::Commit(Commit::create(hash.into(), bytes, true)));
         }
 
         if bytes.starts_with(b"tree ") {
-            return Some(GitObject::Tree(Tree::create(hash, bytes, true)));
+            return Some(GitObject::Tree(Tree::create(hash.into(), bytes, true)));
         }
 
         if bytes.starts_with(b"tag ") {

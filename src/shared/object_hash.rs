@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    mem::{self, MaybeUninit},
-};
+use std::fmt::Display;
 
 use bstr::{BStr, BString, ByteSlice};
 
@@ -22,22 +19,16 @@ impl std::fmt::Debug for ObjectHash {
 }
 
 impl ObjectHash {
-    fn try_from_bstr(hash: &BStr) -> Result<ObjectHash, &'static str> {
-        assert_eq!(hash.len(), 40);
+    pub(crate) fn try_from_bstr<T: From<ObjectHash>>(hash: &BStr) -> Result<T, &'static str> {
         if hash.len() != 40 {
             return Err("ObjectHash has to be 40 characters");
         }
 
-        let mut bytes: [MaybeUninit<u8>; 20] = [MaybeUninit::uninit(); 20];
-        for i in 0..bytes.len() {
-            bytes[i].write(
-                HASH_VALUE[hash[2 * i] as usize] << 4 | HASH_VALUE[hash[2 * i + 1] as usize],
-            );
-        }
+        let bytes = std::array::from_fn(|i| {
+            HASH_VALUE[hash[2 * i] as usize] << 4 | HASH_VALUE[hash[2 * i + 1] as usize]
+        });
 
-        Ok(ObjectHash::from(unsafe {
-            mem::transmute::<_, [u8; 20]>(bytes)
-        }))
+        Ok(ObjectHash::from(bytes).into())
     }
 }
 
