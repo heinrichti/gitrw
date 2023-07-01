@@ -145,8 +145,7 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 
 pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let mut repository = Repository::create(repository_path);
-    print_locked(repository.commits_ordered()
-        .map(|commit| commit.tree()))?;
+    print_locked(repository.commits_ordered().map(|commit| commit.tree()))?;
 
     Ok(())
 }

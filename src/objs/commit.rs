@@ -1,6 +1,8 @@
-use std::{fmt::Display, marker::PhantomData, slice};
+use std::{fmt::Display};
 
 use bstr::{ByteSlice, Lines};
+
+use crate::shared::RefSlice;
 
 use super::{Commit, ObjectHash};
 
@@ -23,32 +25,35 @@ impl<'a> Commit<'a> {
                     break;
                 }
             }
-            line_reader = bytes[null_idx+1..].lines();
+            line_reader = bytes[null_idx + 1..].lines();
         } else {
             line_reader = bytes.lines();
         }
 
-        let tree_line = line_reader.next().map(|line| 
-            (unsafe { line.as_ptr().add(5) }, line.len() - 5)).unwrap();
+        let tree_line = line_reader
+            .next()
+            .map(|line| RefSlice::<'a>::from_slice(&line[5..]))
+            .unwrap();
 
         let mut parents = Vec::with_capacity(1);
         let mut line = line_reader.next().unwrap();
         while line.starts_with(b"parent ") {
-            parents.push((unsafe { line.as_ptr().add(7) }, line.len() - 7));
+            parents.push(RefSlice::from_slice(&line[7..]));
             line = line_reader.next().unwrap();
         }
-        let author_line = (unsafe { line.as_ptr().add(7) }, line.len() - 7);
+
+        let author_line = RefSlice::from_slice(&line[7..]);
         let committer_line = line_reader
             .next()
-            .map(|line| (unsafe { line.as_ptr().add(10) }, line.len() - 10))
+            .map(|line| RefSlice::from_slice(&line[10..]))
             .unwrap();
 
-        dbg!(&object_hash);
-        let remainder = unsafe { committer_line.0.add(committer_line.1 + 1) };
-        let tmp = unsafe { bytes.as_ptr().add(bytes.len()).offset_from(remainder) };
-        dbg!(tmp);
-        let remainder_len: usize = unsafe { bytes.as_ptr().add(bytes.len()).offset_from(remainder) }
-            .try_into().unwrap();
+        let committer_line_start: usize =
+            unsafe { committer_line.as_ptr().offset_from(bytes.as_ptr()) }
+                .try_into()
+                .unwrap();
+        let remainder_start: usize = committer_line_start + committer_line.len() + 1;
+        let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
 
         Commit {
             object_hash,
@@ -57,30 +62,33 @@ impl<'a> Commit<'a> {
             parents,
             author_line,
             committer_line,
-            remainder: (remainder, remainder_len),
-            _phantom: PhantomData,
+            _remainder: remainder,
         }
     }
 
     pub fn tree(&self) -> ObjectHash {
-        unsafe { std::slice::from_raw_parts(self.tree_line.0, self.tree_line.1) }
-            .as_bstr().try_into().unwrap()
+        self.tree_line.as_bstr().try_into().unwrap()
+    }
+
+    pub fn set_tree(&mut self, value: ObjectHash) {
+        self.tree_line = RefSlice::from(value.to_string().as_bytes().to_vec());
     }
 
     pub fn parents(&self) -> Vec<ObjectHash> {
         let mut result = Vec::with_capacity(self.parents.len());
         for parent in self.parents.iter() {
-            let a = unsafe { slice::from_raw_parts(parent.0, parent.1) };
-            result.push(a.as_bstr().try_into().unwrap());
+            result.push(parent.as_bstr().try_into().unwrap());
         }
 
         result
     }
 
-    pub fn author(&self) -> &'a bstr::BStr {
-        Commit::contributor(unsafe {
-            std::slice::from_raw_parts(self.author_line.0, self.author_line.1)
-        })
+    pub fn author(&'a self) -> &'a bstr::BStr {
+        Commit::contributor(&self.author_line)
+    }
+
+    pub fn set_author(&mut self, author: Vec<u8>) {
+        self.author_line = RefSlice::from(author);
     }
 
     fn contributor(line: &'a [u8]) -> &'a bstr::BStr {
@@ -99,9 +107,11 @@ impl<'a> Commit<'a> {
         return (b"").as_bstr();
     }
 
-    pub fn committer(&self) -> &'a bstr::BStr {
-        Commit::contributor(unsafe {
-            std::slice::from_raw_parts(self.committer_line.0, self.committer_line.1)
-        })
+    pub fn committer(&'a self) -> &'a bstr::BStr {
+        Commit::contributor(&self.committer_line)
+    }
+
+    pub fn set_committer(&mut self, committer: Vec<u8>) {
+        self.committer_line = RefSlice::from(committer);
     }
 }

@@ -12,6 +12,7 @@ mod idx_reader;
 mod pack_diff;
 mod packreader;
 mod refs;
+mod shared;
 
 pub mod objs;
 

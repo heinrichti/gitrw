@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use crate::shared::RefSlice;
 
 use self::git_objects::TreeLine;
 
@@ -16,12 +16,11 @@ pub struct ObjectHash {
 pub struct Commit<'a> {
     pub object_hash: ObjectHash,
     _bytes: Box<[u8]>,
-    tree_line: (*const u8, usize),
-    parents: Vec<(*const u8, usize)>,
-    author_line: (*const u8, usize),
-    committer_line: (*const u8, usize),
-    remainder: (*const u8, usize),
-    _phantom: PhantomData<&'a [u8]>,
+    tree_line: RefSlice<'a, u8>,
+    parents: Vec<RefSlice<'a, u8>>,
+    author_line: RefSlice<'a, u8>,
+    committer_line: RefSlice<'a, u8>,
+    _remainder: RefSlice<'a, u8>,
 }
 
 #[derive(Debug)]
