@@ -1,6 +1,6 @@
 use std::{fmt::Display, vec};
 
-use bstr::{ByteSlice, Lines};
+use bstr::{ByteSlice, Lines, ByteVec};
 
 use crate::shared::RefSlice;
 
@@ -123,5 +123,39 @@ impl<'a> Commit<'a> {
 
     pub fn set_committer(&mut self, committer: Vec<u8>) {
         self.committer_line = RefSlice::from(committer);
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let mut result: Vec<u8> = Vec::with_capacity(
+            b"tree \n".len() + self.tree_line.len() +
+            self.parents.iter().map(|parent| b"parent \n".len() + parent.len()).sum::<usize>() +
+            b"author \n".len() + self.committer_line.len() +
+            b"committer \n".len() + self.author_line.len() +
+            self._remainder.len()
+        );
+
+        dbg!(result.capacity());
+
+        result.push_str(b"tree ");
+        result.push_str(&*self.tree_line);
+        result.push_str(b"\n");
+
+        for parent in &self.parents {
+            result.push_str(b"parent ");
+            result.push_str(&**parent);
+            result.push_str(b"\n");
+        }
+
+        result.push_str(b"author ");
+        result.push_str(&*self.author_line);
+        result.push_str(b"\n");
+
+        result.push_str(b"committer ");
+        result.push_str(&*self.committer_line);
+        result.push_str(b"\n");
+
+        result.push_str(&*self._remainder);
+
+        result.into_boxed_slice()
     }
 }
