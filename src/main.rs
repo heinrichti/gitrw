@@ -1,10 +1,13 @@
 use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
-use gitrw::{Repository, objs::{CommitHash, TreeHash}};
+use gitrw::{
+    objs::{CommitHash, TreeHash},
+    Repository,
+};
 #[cfg(not(test))]
 use mimalloc::MiMalloc;
-use rustc_hash::{FxHashSet, FxHashMap};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::io::Write;
 
 #[cfg(not(test))]
@@ -155,13 +158,15 @@ pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Erro
         let parents = commit.parents();
         if parents.len() == 1 {
             let commit_tree = commit.tree();
-            commit_trees.get(parents.first().unwrap()).map(|parent_tree| {
-                if parent_tree == &commit_tree {
-                    // let parent_hash = get_rewritten_commit()
-                    println!("Empty commit: {}", commit.object_hash);
-                    // commits_to_rewrite.insert(commit.object_hash, parent_hash)
-                }
-            });
+            commit_trees
+                .get(parents.first().unwrap())
+                .map(|parent_tree| {
+                    if parent_tree == &commit_tree {
+                        // let parent_hash = get_rewritten_commit()
+                        println!("Empty commit: {}", commit.object_hash);
+                        // commits_to_rewrite.insert(commit.object_hash, parent_hash)
+                    }
+                });
 
             commit_trees.insert(commit.object_hash, commit_tree);
         }
@@ -181,7 +186,7 @@ mod tests {
 
     #[test]
     fn miri_commit() {
-        let commit = Commit::create(
+        let mut commit = Commit::create(
             b"53dd2e51161a4eebd8baacd17383c9af35a8283e"
                 .as_bstr()
                 .try_into()
@@ -189,6 +194,8 @@ mod tests {
             BYTES.into(),
             false,
         );
+        let author = commit.author().to_owned();
+        commit.set_author(b"Test user".to_vec());
 
         let (sender, receiver) = channel();
 
@@ -196,8 +203,9 @@ mod tests {
             sender.send(commit).unwrap();
         });
 
-        for commit in receiver {
-            println!("{}: {}", commit.object_hash, commit.author());
+        for mut commit in receiver {
+            assert_eq!("Test user", commit.author());
+            commit.set_author(author.clone().bytes().collect());
             let b = commit.to_bytes();
             assert_eq!(BYTES.to_vec().into_boxed_slice(), b);
         }

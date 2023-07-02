@@ -41,8 +41,10 @@ impl<'a> Commit<'a> {
             _bytes: bytes,
             tree_line: RefSlice::Owned(vec![]),
             parents: vec![],
-            author_line: RefSlice::Owned(vec![]),
-            committer_line: RefSlice::Owned(vec![]),
+            author: RefSlice::Owned(vec![]),
+            author_time: RefSlice::Owned(vec![]),
+            committer: RefSlice::Owned(vec![]),
+            committer_time: RefSlice::Owned(vec![]),
             _remainder: RefSlice::Owned(vec![]),
         };
 
@@ -73,12 +75,15 @@ impl<'a> Commit<'a> {
             line = line_reader.next().unwrap();
         }
 
-        let author_line = RefSlice::from_slice(&line[7..]);
+        let author_line = &line[7..];
+        let author_time = Self::time_index(author_line);
+        let author = RefSlice::from_slice(&author_line[0..author_time]);
+        let author_time = RefSlice::from_slice(&author_line[author_time + 1..]);
 
-        let committer_line = line_reader
-            .next()
-            .map(|line| RefSlice::from_slice(&line[10..]))
-            .unwrap();
+        let committer_line = line_reader.next().map(|line| &line[10..]).unwrap();
+        let committer_time_index = Self::time_index(committer_line);
+        let committer = RefSlice::from_slice(&committer_line[0..committer_time_index]);
+        let committer_time = RefSlice::from_slice(&committer_line[committer_time_index + 1..]);
 
         let committer_line_start: usize =
             unsafe { committer_line.as_ptr().offset_from(bytes.as_ptr()) }
@@ -87,10 +92,19 @@ impl<'a> Commit<'a> {
         let remainder_start: usize = committer_line_start + committer_line.len() + 1;
         let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
 
+        dbg!(&committer_line.as_bstr());
+        dbg!(&author_line.as_bstr());
+        dbg!(&author.as_bstr());
+        dbg!(&committer.as_bstr());
+        dbg!(&author_time.as_bstr());
+        dbg!(&committer_time.as_bstr());
+
         commit.tree_line = tree_line;
         commit.parents = parents;
-        commit.author_line = author_line;
-        commit.committer_line = committer_line;
+        commit.author = author;
+        commit.author_time = author_time;
+        commit.committer = committer;
+        commit.committer_time = committer_time;
         commit._remainder = remainder;
 
         commit
@@ -114,14 +128,14 @@ impl<'a> Commit<'a> {
     }
 
     pub fn author(&'a self) -> &'a bstr::BStr {
-        Commit::contributor(&self.author_line)
+        &self.author.as_bstr()
     }
 
     pub fn set_author(&mut self, author: Vec<u8>) {
-        self.author_line = RefSlice::from(author);
+        self.author = RefSlice::from(author);
     }
 
-    fn contributor(line: &'a [u8]) -> &'a bstr::BStr {
+    fn time_index(line: &[u8]) -> usize {
         let mut spaces = 0;
         for (i, b) in line.iter().rev().enumerate() {
             let index_from_back = line.len() - i - 1;
@@ -130,19 +144,19 @@ impl<'a> Commit<'a> {
             }
 
             if spaces == 2 {
-                return line[0..index_from_back].as_bstr();
+                return index_from_back;
             }
         }
 
-        return (b"").as_bstr();
+        return line.len();
     }
 
     pub fn committer(&'a self) -> &'a bstr::BStr {
-        Commit::contributor(&self.committer_line)
+        &self.committer.as_bstr()
     }
 
     pub fn set_committer(&mut self, committer: Vec<u8>) {
-        self.committer_line = RefSlice::from(committer);
+        self.committer = RefSlice::from(committer);
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -154,14 +168,14 @@ impl<'a> Commit<'a> {
                     .iter()
                     .map(|parent| b"parent \n".len() + parent.len())
                     .sum::<usize>()
-                + b"author \n".len()
-                + self.committer_line.len()
-                + b"committer \n".len()
-                + self.author_line.len()
+                + b"author  \n".len()
+                + self.committer.len()
+                + self.committer_time.len()
+                + b"committer  \n".len()
+                + self.author.len()
+                + self.author_time.len()
                 + self._remainder.len(),
         );
-
-        dbg!(result.capacity());
 
         result.push_str(b"tree ");
         result.push_str(self.tree_line.deref());
@@ -174,11 +188,15 @@ impl<'a> Commit<'a> {
         }
 
         result.push_str(b"author ");
-        result.push_str(self.author_line.deref());
+        result.push_str(self.author.deref());
+        result.push_str(b" ");
+        result.push_str(self.author_time.deref());
         result.push_str(b"\n");
 
         result.push_str(b"committer ");
-        result.push_str(self.committer_line.deref());
+        result.push_str(self.committer.deref());
+        result.push_str(b" ");
+        result.push_str(self.committer_time.deref());
         result.push_str(b"\n");
 
         result.push_str(self._remainder.deref());

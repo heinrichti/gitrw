@@ -18,8 +18,10 @@ pub struct Commit<'a> {
     _bytes: Box<[u8]>,
     tree_line: RefSlice<'a, u8>,
     parents: Vec<RefSlice<'a, u8>>,
-    author_line: RefSlice<'a, u8>,
-    committer_line: RefSlice<'a, u8>,
+    author: RefSlice<'a, u8>,
+    author_time: RefSlice<'a, u8>,
+    committer: RefSlice<'a, u8>,
+    committer_time: RefSlice<'a, u8>,
     _remainder: RefSlice<'a, u8>,
 }
 
