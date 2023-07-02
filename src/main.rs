@@ -1,10 +1,10 @@
 use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
-use gitrw::Repository;
+use gitrw::{Repository, objs::{CommitHash, TreeHash}};
 #[cfg(not(test))]
 use mimalloc::MiMalloc;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashSet, FxHashMap};
 use std::io::Write;
 
 #[cfg(not(test))]
@@ -147,13 +147,33 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 
 pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let mut repository = Repository::create(repository_path);
-    print_locked(repository.commits_ordered().map(|commit| commit.tree()))?;
+
+    // let mut commits_to_rewrite: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
+    let mut commit_trees: FxHashMap<CommitHash, TreeHash> = FxHashMap::default();
+
+    for commit in repository.commits_ordered() {
+        let parents = commit.parents();
+        if parents.len() == 1 {
+            let commit_tree = commit.tree();
+            commit_trees.get(parents.first().unwrap()).map(|parent_tree| {
+                if parent_tree == &commit_tree {
+                    // let parent_hash = get_rewritten_commit()
+                    println!("Empty commit: {}", commit.object_hash);
+                    // commits_to_rewrite.insert(commit.object_hash, parent_hash)
+                }
+            });
+
+            commit_trees.insert(commit.object_hash, commit_tree);
+        }
+    }
 
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc::channel;
+
     use bstr::ByteSlice;
     use gitrw::objs::Commit;
 
@@ -169,8 +189,19 @@ mod tests {
             BYTES.into(),
             false,
         );
-        let b = commit.to_bytes();
 
-        assert_eq!(BYTES.to_vec().into_boxed_slice(), b);
+        let (sender, receiver) = channel();
+
+        let thread = std::thread::spawn(move || {
+            sender.send(commit).unwrap();
+        });
+
+        for commit in receiver {
+            println!("{}: {}", commit.object_hash, commit.author());
+            let b = commit.to_bytes();
+            assert_eq!(BYTES.to_vec().into_boxed_slice(), b);
+        }
+
+        thread.join().unwrap();
     }
 }
