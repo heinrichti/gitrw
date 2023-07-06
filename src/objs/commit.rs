@@ -92,13 +92,6 @@ impl<'a> Commit<'a> {
         let remainder_start: usize = committer_line_start + committer_line.len() + 1;
         let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
 
-        dbg!(&committer_line.as_bstr());
-        dbg!(&author_line.as_bstr());
-        dbg!(&author.as_bstr());
-        dbg!(&committer.as_bstr());
-        dbg!(&author_time.as_bstr());
-        dbg!(&committer_time.as_bstr());
-
         commit.tree_line = tree_line;
         commit.parents = parents;
         commit.author = author;
