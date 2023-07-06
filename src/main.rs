@@ -16,10 +16,15 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(clap::Parser)]
 struct Cli {
+    /// Path to the mirrored/bare repository (do not use on a repository with a working copy)
     repository: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
+
+    /// Do not change the repository.
+    #[arg(short, long)]
+    dry_run: bool,
 }
 
 #[derive(Subcommand)]
