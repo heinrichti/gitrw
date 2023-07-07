@@ -1,6 +1,6 @@
 use memmap2::Mmap;
 
-use crate::{compression::Compression, packreader::PackObject};
+use crate::{compression::Decompression, packreader::PackObject};
 
 pub struct CopyInstruction {
     offset: usize,
@@ -117,7 +117,7 @@ pub struct PackDiff {
 
 impl PackDiff {
     pub fn create(
-        compression: &mut Compression,
+        compression: &mut Decompression,
         mmap: &Mmap,
         pack_object: &PackObject,
     ) -> PackDiff {

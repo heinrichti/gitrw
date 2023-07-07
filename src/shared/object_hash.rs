@@ -68,6 +68,12 @@ impl From<[u8; 20]> for ObjectHash {
     }
 }
 
+impl From<ObjectHash> for Vec<u8> {
+    fn from(val: ObjectHash) -> Self {
+        val.bytes.to_vec()
+    }
+}
+
 const HASH_VALUE: &[u8] = &[
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0, 0, 0, 0,

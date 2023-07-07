@@ -10,27 +10,27 @@ use crate::{
 };
 
 use super::{
-    compression::Compression,
+    compression::Decompression,
     objs::{GitObject, TagTargetType},
     packreader::PackReader,
     refs::GitRef,
 };
 
-pub struct CommitsFifoIter<'a> {
+pub struct CommitsFifoIter<'a, 'b> {
     pack_reader: &'a PackReader,
-    compression: &'a mut Compression,
+    compression: &'a mut Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit<'a>>,
+    commits: Vec<Commit<'b>>,
     processed_commits: FxHashSet<CommitHash>,
     parents_seen: FxHashSet<CommitHash>,
 }
 
-impl<'a> CommitsFifoIter<'a> {
+impl<'a, 'b> CommitsFifoIter<'a, 'b> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
-        compression: &'a mut Compression,
-    ) -> CommitsFifoIter<'a> {
+        compression: &'a mut Decompression,
+    ) -> CommitsFifoIter<'a, 'b> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
@@ -62,17 +62,17 @@ impl<'a> CommitsFifoIter<'a> {
     }
 }
 
-impl<'a> Iterator for CommitsFifoIter<'a> {
-    type Item = Commit<'a>;
+impl<'a, 'b> Iterator for CommitsFifoIter<'a, 'b> {
+    type Item = Commit<'b>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
-            if self.processed_commits.contains(&commit.object_hash) {
-                self.parents_seen.remove(&commit.object_hash);
-            } else if !self.parents_seen.insert(commit.object_hash.clone())
+            if self.processed_commits.contains(commit.hash()) {
+                self.parents_seen.remove(commit.hash());
+            } else if !self.parents_seen.insert(commit.hash().clone())
                 || commit.parents().is_empty()
             {
-                self.processed_commits.insert(commit.object_hash.clone());
+                self.processed_commits.insert(commit.hash().clone());
                 return Some(commit);
             } else {
                 let parents = commit.parents();
@@ -102,7 +102,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
 
 pub struct CommitsLifoIter<'a> {
     pack_reader: &'a PackReader,
-    compression: &'a mut Compression,
+    compression: &'a mut Decompression,
     repository_path: &'a Path,
     commits: Vec<Commit<'a>>,
     processed_commits: FxHashSet<CommitHash>,
@@ -112,7 +112,7 @@ impl<'a> CommitsLifoIter<'a> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
-        compression: &'a mut Compression,
+        compression: &'a mut Decompression,
     ) -> CommitsLifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
@@ -148,7 +148,7 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
-            if self.processed_commits.insert(commit.object_hash.clone()) {
+            if self.processed_commits.insert(commit.hash().clone()) {
                 for parent in commit.parents() {
                     if let Some(parent_commit) = read_object_from_hash(
                         self.compression,
@@ -172,7 +172,7 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
 }
 
 fn read_commit_from_ref<'a>(
-    compression: &mut Compression,
+    compression: &mut Decompression,
     repository_path: &Path,
     pack_reader: &PackReader,
     r: GitRef,
@@ -206,7 +206,7 @@ fn read_commit_from_ref<'a>(
 }
 
 fn read_object_from_hash<'a>(
-    compression: &mut Compression,
+    compression: &mut Decompression,
     repository_path: &Path,
     pack_reader: &PackReader,
     hash: ObjectHash,
@@ -217,7 +217,11 @@ fn read_object_from_hash<'a>(
 
     if let Ok(bytes) = compression.unpack_file(repository_path, &hash.to_string()) {
         if bytes.starts_with(b"commit ") {
-            return Some(GitObject::Commit(Commit::create(hash.into(), bytes, true)));
+            return Some(GitObject::Commit(Commit::create(
+                Some(hash.into()),
+                bytes,
+                true,
+            )));
         }
 
         if bytes.starts_with(b"tree ") {

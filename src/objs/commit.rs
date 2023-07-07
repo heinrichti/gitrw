@@ -1,8 +1,9 @@
-use std::{fmt::Display, ops::Deref, vec};
+use std::{fmt::Display, hash::Hasher, ops::Deref, vec};
 
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
+use rs_sha1::{HasherContext, Sha1Hasher};
 
-use crate::shared::RefSlice;
+use crate::{shared::RefSlice, WriteObject};
 
 use super::{Commit, CommitHash, ObjectHash, TreeHash};
 
@@ -28,16 +29,16 @@ impl TryFrom<&BStr> for CommitHash {
 
 impl<'a> Display for Commit<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.object_hash))?;
+        f.write_fmt(format_args!("{}", self.hash()))?;
         Ok(())
     }
 }
 
 impl<'a> Commit<'a> {
-    pub fn create(object_hash: CommitHash, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
+    pub fn create(hash: Option<CommitHash>, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
         let mut line_reader: Lines<'_>;
         let mut commit = Commit {
-            object_hash,
+            hash: Some(hash.unwrap_or_else(|| CommitHash(Self::calculate_hash(&bytes)))),
             _bytes: bytes,
             tree_line: RefSlice::Owned(vec![]),
             parents: vec![],
@@ -103,12 +104,32 @@ impl<'a> Commit<'a> {
         commit
     }
 
+    pub fn calculate_hash(data: &[u8]) -> ObjectHash {
+        let mut hasher = Sha1Hasher::default();
+        hasher.write(b"commit ");
+        hasher.write(data.len().to_string().as_bytes());
+        hasher.write(b"\0");
+        hasher.write(data);
+        let bytes = HasherContext::finish(&mut hasher);
+        let bytes: [u8; 20] = bytes.into();
+        ObjectHash::from(bytes)
+    }
+
+    pub fn has_changes(&self) -> bool {
+        self.hash.is_none()
+    }
+
+    pub fn hash(&self) -> &CommitHash {
+        self.hash.as_ref().unwrap()
+    }
+
     pub fn tree(&self) -> TreeHash {
         self.tree_line.as_bstr().try_into().unwrap()
     }
 
     pub fn set_tree(&mut self, value: TreeHash) {
         self.tree_line = RefSlice::from(value.to_string().as_bytes().to_vec());
+        self.hash = None;
     }
 
     pub fn parents(&self) -> Vec<CommitHash> {
@@ -120,12 +141,18 @@ impl<'a> Commit<'a> {
         result
     }
 
+    pub fn set_parent(&mut self, index: usize, value: CommitHash) {
+        self.parents[index] = RefSlice::Owned(value.0.to_string().bytes().collect());
+        self.hash = None;
+    }
+
     pub fn author(&'a self) -> &'a bstr::BStr {
-        &self.author.as_bstr()
+        self.author.as_bstr()
     }
 
     pub fn set_author(&mut self, author: Vec<u8>) {
         self.author = RefSlice::from(author);
+        self.hash = None;
     }
 
     fn time_index(line: &[u8]) -> usize {
@@ -141,15 +168,16 @@ impl<'a> Commit<'a> {
             }
         }
 
-        return line.len();
+        line.len()
     }
 
     pub fn committer(&'a self) -> &'a bstr::BStr {
-        &self.committer.as_bstr()
+        self.committer.as_bstr()
     }
 
     pub fn set_committer(&mut self, committer: Vec<u8>) {
         self.committer = RefSlice::from(committer);
+        self.hash = None;
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> {
@@ -195,5 +223,19 @@ impl<'a> Commit<'a> {
         result.push_str(self._remainder.deref());
 
         result.into_boxed_slice()
+    }
+}
+
+impl<'a> WriteObject for Commit<'a> {
+    fn to_bytes(&self) -> &[u8] {
+        &self._bytes
+    }
+
+    fn hash(&self) -> &ObjectHash {
+        &self.hash().0
+    }
+
+    fn prefix(&self) -> &str {
+        "commit"
     }
 }

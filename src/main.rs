@@ -1,8 +1,17 @@
-use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::Display,
+    hash::BuildHasher,
+    io::BufWriter,
+    path::PathBuf,
+    sync::mpsc::{channel, Receiver, Sender},
+    thread,
+};
 
 use clap::{ArgGroup, Parser, Subcommand};
 use gitrw::{
-    objs::{CommitHash, TreeHash},
+    objs::{Commit, CommitHash, TreeHash},
     Repository,
 };
 #[cfg(not(test))]
@@ -64,6 +73,7 @@ enum ContributorArgs {
 
 fn main() {
     let cli = Cli::parse();
+
     let repository_path = if let Some(repository_path) = &cli.repository {
         PathBuf::from(repository_path)
     } else {
@@ -97,7 +107,7 @@ fn main() {
         Commands::PruneEmpty => {
             println!("Pruning empty commits");
 
-            remove_empty_commits(repository_path).unwrap();
+            remove_empty_commits(repository_path, cli.dry_run).unwrap();
         }
     };
 }
@@ -153,31 +163,83 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 //     Ok(())
 // }
 
-pub fn remove_empty_commits(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut repository = Repository::create(repository_path);
+fn parent_if_empty<'a, T: BuildHasher>(
+    commit: &'a Commit,
+    rewritten_commits: &'a HashMap<CommitHash, CommitHash, T>,
+    commit_trees: &'a HashMap<CommitHash, TreeHash, T>,
+) -> Option<CommitHash> {
+    let parents = commit.parents();
+    if parents.len() == 1 {
+        let commit_tree = commit.tree();
+        let parent = parents.first().unwrap();
+        let parent = rewritten_commits
+            .get(parent)
+            .unwrap_or_else(|| parent)
+            .clone();
 
-    // let mut commits_to_rewrite: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
+        let parent_tree = &commit_trees[&parent];
+        if parent_tree == &commit_tree {
+            Some(parent)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn find_empty_commits(repository_path: PathBuf, tx: Sender<Commit>) {
+    let mut repository = Repository::create(repository_path);
+    let mut rewritten_commits: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
     let mut commit_trees: FxHashMap<CommitHash, TreeHash> = FxHashMap::default();
 
-    for commit in repository.commits_ordered() {
-        let parents = commit.parents();
-        if parents.len() == 1 {
-            let commit_tree = commit.tree();
-            commit_trees
-                .get(parents.first().unwrap())
-                .map(|parent_tree| {
-                    if parent_tree == &commit_tree {
-                        // let parent_hash = get_rewritten_commit()
-                        println!("Empty commit: {}", commit.object_hash);
-                        // commits_to_rewrite.insert(commit.object_hash, parent_hash)
-                    }
-                });
+    for mut commit in repository.commits_topo() {
+        if let Some(parent) = parent_if_empty(&commit, &rewritten_commits, &commit_trees) {
+            println!("Empty commit {} -> {}", commit.hash(), parent);
+            rewritten_commits.insert(commit.hash().clone(), parent);
+            continue;
+        }
 
-            commit_trees.insert(commit.object_hash, commit_tree);
+        let commit_hash = commit.hash().clone();
+        commit
+            .parents()
+            .iter()
+            .map(|parent| {
+                rewritten_commits
+                    .get(parent)
+                    .unwrap_or_else(|| parent)
+                    .clone()
+            })
+            .enumerate()
+            .for_each(|(i, parent)| commit.set_parent(i, parent));
+
+        let commit = Commit::create(None, commit.to_bytes(), false);
+        commit_trees.insert(commit.hash().clone(), commit.tree());
+
+        if &commit_hash != commit.hash() {
+            rewritten_commits.insert(commit_hash, commit.hash().clone());
+            tx.send(commit).unwrap();
         }
     }
+}
+
+pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(), Box<dyn Error>> {
+    let write_path = repository_path.clone();
+    let (tx, rx) = channel();
+
+    let thread = thread::spawn(move || find_empty_commits(repository_path.clone(), tx));
+    write_commits(rx, dry_run, write_path);
+
+    thread.join().unwrap();
 
     Ok(())
+}
+
+fn write_commits(rx: Receiver<Commit<'_>>, dry_run: bool, repository_path: PathBuf) {
+    let mut repository = Repository::create(repository_path);
+    for commit in rx.iter().filter(|_| !dry_run) {
+        repository.write(commit);
+    }
 }
 
 #[cfg(test)]
@@ -185,20 +247,19 @@ mod tests {
     use std::sync::mpsc::channel;
 
     use bstr::ByteSlice;
-    use gitrw::objs::Commit;
+    use gitrw::objs::{Commit, CommitHash};
 
-    const BYTES: &[u8] = b"tree 31aa860596f003d69b896943677e9fe5ff208233\nparent 5eec99927bb6058c8180e5dac871c89c7d01b0ab\nauthor Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688207675 +0200\ncommitter Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688209149 +0200\n\nChanging of commit data";
+    const BYTES: &[u8] = b"tree 31aa860596f003d69b896943677e9fe5ff208233\nparent 5eec99927bb6058c8180e5dac871c89c7d01b0ab\nauthor Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688207675 +0200\ncommitter Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688209149 +0200\n\nChanging of commit data\n";
 
     #[test]
     fn miri_commit() {
-        let mut commit = Commit::create(
-            b"53dd2e51161a4eebd8baacd17383c9af35a8283e"
-                .as_bstr()
-                .try_into()
-                .unwrap(),
-            BYTES.into(),
-            false,
-        );
+        let object_hash: CommitHash = b"53dd2e51161a4eebd8baacd17383c9af35a8283e"
+            .as_bstr()
+            .try_into()
+            .unwrap();
+
+        let mut commit = Commit::create(Some(CommitHash::from(object_hash)), BYTES.into(), false);
+
         let author = commit.author().to_owned();
         commit.set_author(b"Test user".to_vec());
 

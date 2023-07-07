@@ -14,7 +14,7 @@ pub struct CommitHash(pub(crate) ObjectHash);
 
 #[derive(Debug)]
 pub struct Commit<'a> {
-    pub object_hash: CommitHash,
+    hash: Option<CommitHash>,
     _bytes: Box<[u8]>,
     tree_line: RefSlice<'a, u8>,
     parents: Vec<RefSlice<'a, u8>>,

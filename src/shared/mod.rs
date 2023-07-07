@@ -20,8 +20,7 @@ pub struct UnsafeSlice<'a, T> {
     _phantom: PhantomData<&'a T>,
 }
 
-unsafe impl<'a, T> Send for UnsafeSlice<'a, T> {
-}
+unsafe impl<'a, T> Send for UnsafeSlice<'a, T> {}
 
 impl<'a, T> RefSlice<'a, T> {
     pub fn from_slice(slice: &[T]) -> RefSlice<'a, T> {
