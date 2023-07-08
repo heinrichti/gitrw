@@ -21,3 +21,4 @@ clap = { version = "4.1.8", features = ["derive"] }
 libdeflater = { version = "0.12.0", features = ["use_rust_alloc"] }
 flate2 = { version = "1.0.25", default-features = false, features = ["zlib-ng"] }
 rs_sha1 = "0.1.3"
+rayon = "1.7.0"

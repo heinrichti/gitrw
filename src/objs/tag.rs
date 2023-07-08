@@ -65,7 +65,11 @@ impl<'a> Tag<'a> {
 
         panic!(
             "{}",
-            format_args!("unknown target type: {}", target.as_bstr())
+            format_args!(
+                "unknown target type: {} for object {}",
+                target.as_bstr(),
+                self.object()
+            )
         );
     }
 }

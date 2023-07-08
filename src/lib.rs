@@ -5,7 +5,7 @@ use std::{
 };
 
 use commits::{CommitsFifoIter, CommitsLifoIter};
-use compression::{Compression, Decompression};
+use compression::Decompression;
 use objs::Commit;
 use packreader::PackReader;
 use refs::GitRef;
@@ -25,7 +25,6 @@ pub struct Repository {
     path: PathBuf,
     pack_reader: PackReader,
     decompression: Decompression,
-    compression: Compression,
 }
 
 pub trait WriteObject {
@@ -38,22 +37,19 @@ impl Repository {
     pub fn create(path: PathBuf) -> Self {
         let pack_reader = PackReader::create(&path).unwrap();
         let decompression = Decompression::default();
-        let compression = Compression::default();
 
         Repository {
             path,
             pack_reader,
             decompression,
-            compression,
         }
     }
 
-    pub fn write(&mut self, object: impl WriteObject) {
+    pub fn write(mut file_path: PathBuf, object: impl WriteObject) {
         let hash = object.hash().to_string();
         let data = object.to_bytes();
         let prefix = object.prefix();
 
-        let mut file_path = self.path.clone();
         file_path.push("objects");
         file_path.push(&hash[0..2]);
 
@@ -61,7 +57,7 @@ impl Repository {
 
         file_path.push(&hash[2..]);
         if !Path::new(&file_path).exists() {
-            self.compression.pack_file(&file_path, prefix, &data);
+            compression::pack_file(&file_path, prefix, data);
         }
     }
 

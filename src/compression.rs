@@ -16,18 +16,6 @@ pub struct Decompression {
     flate2_decompressor: flate2::Decompress,
 }
 
-pub struct Compression {
-    flate2_compress: flate2::Compress,
-}
-
-impl Default for Compression {
-    fn default() -> Self {
-        Self {
-            flate2_compress: flate2::Compress::new(flate2::Compression::default(), true),
-        }
-    }
-}
-
 static mut FILE_BUF: [u8; 8192] = [0u8; 8192];
 
 impl Default for Decompression {
@@ -39,40 +27,34 @@ impl Default for Decompression {
     }
 }
 
-impl Compression {
-    pub fn pack_file(&mut self, path: &Path, prefix: &str, data: &[u8]) {
-        let file = File::create_new(path).unwrap();
-        let mut buf_writer = BufWriter::new(file);
-        let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
+pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
+    let file = File::create_new(path).unwrap();
+    let mut buf_writer = BufWriter::new(file);
+    let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
 
-        self.flate2_compress.reset();
+    let mut compress = flate2::Compress::new(flate2::Compression::default(), true);
 
-        let mut output_buf: Vec<u8> = Vec::with_capacity(data.len() + preamble.len());
-        let status = self
-            .flate2_compress
-            .compress_vec(&preamble, &mut output_buf, flate2::FlushCompress::None)
-            .unwrap();
+    let mut output_buf: Vec<u8> = Vec::with_capacity(data.len() + preamble.len());
+    let status = compress
+        .compress_vec(&preamble, &mut output_buf, flate2::FlushCompress::None)
+        .unwrap();
 
-        debug_assert_eq!(self.flate2_compress.total_in() as usize, preamble.len());
+    if status != Status::Ok {
+        panic!("Something went wrong compressing the preamble");
+    }
 
-        if status != Status::Ok {
-            panic!("Something went wrong compressing the preamble");
-        }
+    let status = compress
+        .compress_vec(data, &mut output_buf, flate2::FlushCompress::Finish)
+        .unwrap();
 
-        let status = self
-            .flate2_compress
-            .compress_vec(data, &mut output_buf, flate2::FlushCompress::Finish)
-            .unwrap();
+    buf_writer
+        .write_all(&output_buf[0..compress.total_out().try_into().unwrap()])
+        .unwrap();
 
-        buf_writer
-            .write_all(&output_buf[0..self.flate2_compress.total_out().try_into().unwrap()])
-            .unwrap();
-
-        if status == Status::BufError {
-            panic!("Status is BufError");
-        } else if status == Status::Ok {
-            panic!("Status is Ok");
-        }
+    if status == Status::BufError {
+        panic!("Status is BufError");
+    } else if status == Status::Ok {
+        panic!("Status is Ok");
     }
 }
 

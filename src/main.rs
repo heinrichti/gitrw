@@ -235,11 +235,15 @@ pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(
     Ok(())
 }
 
+use rayon::prelude::*;
+
 fn write_commits(rx: Receiver<Commit<'_>>, dry_run: bool, repository_path: PathBuf) {
-    let mut repository = Repository::create(repository_path);
-    for commit in rx.iter().filter(|_| !dry_run) {
-        repository.write(commit);
-    }
+    rx.into_iter()
+        .filter(|_| !dry_run)
+        .par_bridge()
+        .for_each(|commit| {
+            Repository::write(repository_path.clone(), commit);
+        });
 }
 
 #[cfg(test)]
