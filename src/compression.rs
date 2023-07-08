@@ -59,6 +59,7 @@ pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
 }
 
 impl Decompression {
+    #[allow(clippy::uninit_vec)]
     pub fn unpack(
         &mut self,
         mmap: &Mmap,

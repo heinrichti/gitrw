@@ -17,6 +17,7 @@ pub struct PackOffset {
     pub offset: usize,
 }
 
+#[allow(clippy::uninit_vec)]
 pub fn get_pack_offsets(idx_path: &Path) -> Result<Vec<PackOffset>, Box<dyn Error>> {
     let file = File::open(idx_path)?;
     let mut reader = BufReader::new(file);

@@ -164,6 +164,7 @@ impl PackDiff {
         }
     }
 
+    #[allow(clippy::uninit_vec)]
     pub fn apply(&self, bytes: &[u8]) -> Box<[u8]> {
         let mut target = Vec::with_capacity(self.target_len);
         unsafe { target.set_len(self.target_len) };

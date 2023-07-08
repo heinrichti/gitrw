@@ -135,7 +135,7 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
     let mut committers: Vec<_> = committers.iter().collect();
     committers.sort();
 
-    print_locked(committers.iter().into_iter())?;
+    print_locked(committers.iter())?;
 
     Ok(())
 }
@@ -172,10 +172,7 @@ fn parent_if_empty<'a, T: BuildHasher>(
     if parents.len() == 1 {
         let commit_tree = commit.tree();
         let parent = parents.first().unwrap();
-        let parent = rewritten_commits
-            .get(parent)
-            .unwrap_or_else(|| parent)
-            .clone();
+        let parent = rewritten_commits.get(parent).unwrap_or(parent).clone();
 
         let parent_tree = &commit_trees[&parent];
         if parent_tree == &commit_tree {
@@ -204,12 +201,7 @@ fn find_empty_commits(repository_path: PathBuf, tx: Sender<Commit>) {
         commit
             .parents()
             .iter()
-            .map(|parent| {
-                rewritten_commits
-                    .get(parent)
-                    .unwrap_or_else(|| parent)
-                    .clone()
-            })
+            .map(|parent| rewritten_commits.get(parent).unwrap_or(parent).clone())
             .enumerate()
             .for_each(|(i, parent)| commit.set_parent(i, parent));
 
@@ -262,7 +254,7 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let mut commit = Commit::create(Some(CommitHash::from(object_hash)), BYTES.into(), false);
+        let mut commit = Commit::create(Some(object_hash), BYTES.into(), false);
 
         let author = commit.author().to_owned();
         commit.set_author(b"Test user".to_vec());
