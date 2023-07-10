@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use bstr::ByteSlice;
+use bstr::{ByteSlice, ByteVec};
 
 use crate::{objs::TagTargetType, shared::RefSlice};
 
@@ -12,6 +12,7 @@ impl<'a> Tag<'a> {
             _bytes: bytes,
             object: RefSlice::Owned(vec![]),
             obj_type: RefSlice::Owned(vec![]),
+            remainder: RefSlice::Owned(vec![]),
         };
 
         let bytes = &tag._bytes;
@@ -27,26 +28,16 @@ impl<'a> Tag<'a> {
         let line = line_reader.next().unwrap();
         let obj_type = RefSlice::from_slice(&line[5..]);
 
-        // let line = line_reader.next().unwrap();
-
-        // for line in line_reader {
-        //     // if bytes[line.clone()].starts_with(b"object ") {
-        //     //     object = line.start + b"object ".len()..line.end;
-        //     // } else if bytes[line.clone()].starts_with(b"type ") {
-        //         // obj_type = line.start + b"type ".len()..line.end;
-        //     // } else
-        //     if bytes[line.clone()].starts_with(b"tag ") {
-        //         tag = line.start + b"tag ".len()..line.end;
-        //     } else if bytes[line.clone()].starts_with(b"tagger ") {
-        //         tagger = line.start + b"tagger ".len()..line.end;
-        //     } else {
-        //         message = line;
-        //         break;
-        //     }
-        // }
+        let line_start: usize = unsafe { line.as_ptr().offset_from(bytes.as_ptr()) }
+            .try_into()
+            .unwrap();
+        let remainder_start = line_start + line.len() + 1;
+        let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
 
         tag.object = object;
         tag.obj_type = obj_type;
+        tag.remainder = remainder;
+
         tag
     }
 
@@ -71,5 +62,27 @@ impl<'a> Tag<'a> {
                 self.object()
             )
         );
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let byte_size: usize = b"object \n".len()
+            + self.object.len()
+            + b"type \n".len()
+            + self.obj_type.len()
+            + self.remainder.len();
+
+        let mut result: Vec<u8> = Vec::with_capacity(byte_size);
+
+        result.push_str(b"object ");
+        result.push_str(self.object.deref());
+        result.push_str(b"\n");
+
+        result.push_str(b"type ");
+        result.push_str(self.obj_type.deref());
+        result.push_str(b"\n");
+
+        result.push_str(self.remainder.deref());
+
+        result.into_boxed_slice()
     }
 }

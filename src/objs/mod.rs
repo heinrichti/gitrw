@@ -27,14 +27,10 @@ pub struct Commit<'a> {
 
 #[derive(Debug)]
 pub struct Tag<'a> {
-    // object_hash: ObjectHash,
     _bytes: Box<[u8]>,
-    // object: Range<usize>,
-    // obj_type: Range<usize>,
     object: RefSlice<'a, u8>,
-    obj_type: RefSlice<'a, u8>, // tag: Range<usize>,
-                                // tagger: Range<usize>,
-                                // message: Range<usize>
+    obj_type: RefSlice<'a, u8>,
+    remainder: RefSlice<'a, u8>,
 }
 
 #[derive(Debug)]

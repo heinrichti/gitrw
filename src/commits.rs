@@ -182,13 +182,9 @@ fn read_commit_from_ref<'a>(
         GitRef::Tag(tag) => tag.hash,
     };
 
-    let mut git_object = read_object_from_hash(
-        compression,
-        repository_path,
-        pack_reader,
-        hash.try_into().unwrap(),
-    )
-    .unwrap();
+    let hash: ObjectHash = hash.try_into().unwrap();
+    let mut git_object =
+        read_object_from_hash(compression, repository_path, pack_reader, hash).unwrap();
     while let GitObject::Tag(tag) = &git_object {
         if tag.target_type() == TagTargetType::Tree {
             break;
