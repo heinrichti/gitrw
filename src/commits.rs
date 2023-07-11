@@ -16,21 +16,21 @@ use super::{
     refs::GitRef,
 };
 
-pub struct CommitsFifoIter<'a, 'b> {
+pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: &'a mut Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit<'b>>,
+    commits: Vec<Commit<'a>>,
     processed_commits: FxHashSet<CommitHash>,
     parents_seen: FxHashSet<CommitHash>,
 }
 
-impl<'a, 'b> CommitsFifoIter<'a, 'b> {
+impl<'a> CommitsFifoIter<'a> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
         compression: &'a mut Decompression,
-    ) -> CommitsFifoIter<'a, 'b> {
+    ) -> CommitsFifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
@@ -62,8 +62,8 @@ impl<'a, 'b> CommitsFifoIter<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Iterator for CommitsFifoIter<'a, 'b> {
-    type Item = Commit<'b>;
+impl<'a> Iterator for CommitsFifoIter<'a> {
+    type Item = Commit<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
@@ -150,17 +150,19 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
         while let Some(commit) = self.commits.pop() {
             if self.processed_commits.insert(commit.hash().clone()) {
                 for parent in commit.parents() {
-                    if let Some(parent_commit) = read_object_from_hash(
-                        self.compression,
-                        self.repository_path,
-                        self.pack_reader,
-                        parent.0,
-                    ) {
-                        match parent_commit {
-                            GitObject::Commit(parent) => self.commits.push(parent),
-                            _ => panic!("Expected a commit, but got something else"),
+                    if !self.processed_commits.contains(&parent) {
+                        if let Some(parent_commit) = read_object_from_hash(
+                            self.compression,
+                            self.repository_path,
+                            self.pack_reader,
+                            parent.0,
+                        ) {
+                            match parent_commit {
+                                GitObject::Commit(parent) => self.commits.push(parent),
+                                _ => panic!("Expected a commit, but got something else"),
+                            };
                         };
-                    };
+                    }
                 }
 
                 return Some(commit);

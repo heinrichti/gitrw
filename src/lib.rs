@@ -6,13 +6,14 @@ use std::{
 
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
-use objs::Commit;
+
 use packreader::PackReader;
 use refs::GitRef;
 use shared::ObjectHash;
 
 mod commits;
 mod compression;
+pub mod ffi;
 mod idx_reader;
 mod pack_diff;
 mod packreader;
@@ -61,11 +62,11 @@ impl Repository {
         }
     }
 
-    pub fn commits_topo<'a, 'b>(&'a mut self) -> CommitsFifoIter<'a, 'b> {
-        CommitsFifoIter::<'a, 'b>::create(&self.path, &self.pack_reader, &mut self.decompression)
+    pub fn commits_topo(&mut self) -> CommitsFifoIter {
+        CommitsFifoIter::create(&self.path, &self.pack_reader, &mut self.decompression)
     }
 
-    pub fn commits_lifo(&mut self) -> impl Iterator<Item = Commit> {
+    pub fn commits_lifo(&mut self) -> CommitsLifoIter {
         CommitsLifoIter::create(&self.path, &self.pack_reader, &mut self.decompression)
     }
 

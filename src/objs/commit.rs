@@ -150,6 +150,10 @@ impl<'a> Commit<'a> {
         self.author.as_bstr()
     }
 
+    pub fn author_bytes(&'a self) -> &'a [u8] {
+        &self.author
+    }
+
     pub fn set_author(&mut self, author: Vec<u8>) {
         self.author = RefSlice::from(author);
         self.hash = None;
@@ -173,6 +177,10 @@ impl<'a> Commit<'a> {
 
     pub fn committer(&'a self) -> &'a bstr::BStr {
         self.committer.as_bstr()
+    }
+
+    pub fn committer_bytes(&'a self) -> &'a [u8] {
+        &self.committer
     }
 
     pub fn set_committer(&mut self, committer: Vec<u8>) {
