@@ -20,8 +20,8 @@ pub struct FfiRepository<'a> {
 
 #[ffi_type(opaque)]
 #[repr(C)]
-pub struct CommitFfi<'a> {
-    commit: Commit<'a>,
+pub struct CommitFfi {
+    commit: Commit,
 }
 
 #[ffi_function]

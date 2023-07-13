@@ -20,7 +20,7 @@ pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: &'a mut Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit<'a>>,
+    commits: Vec<Commit>,
     processed_commits: FxHashSet<CommitHash>,
     parents_seen: FxHashSet<CommitHash>,
 }
@@ -30,7 +30,7 @@ impl<'a> CommitsFifoIter<'a> {
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
         compression: &'a mut Decompression,
-    ) -> CommitsFifoIter<'a> {
+    ) -> Self {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
         let parents_seen = FxHashSet::default();
@@ -63,7 +63,7 @@ impl<'a> CommitsFifoIter<'a> {
 }
 
 impl<'a> Iterator for CommitsFifoIter<'a> {
-    type Item = Commit<'a>;
+    type Item = Commit;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
@@ -104,7 +104,7 @@ pub struct CommitsLifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: &'a mut Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit<'a>>,
+    commits: Vec<Commit>,
     processed_commits: FxHashSet<CommitHash>,
 }
 
@@ -144,7 +144,7 @@ impl<'a> CommitsLifoIter<'a> {
 }
 
 impl<'a> Iterator for CommitsLifoIter<'a> {
-    type Item = Commit<'a>;
+    type Item = Commit;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
@@ -173,12 +173,12 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
     }
 }
 
-fn read_commit_from_ref<'a>(
+fn read_commit_from_ref(
     compression: &mut Decompression,
     repository_path: &Path,
     pack_reader: &PackReader,
     r: GitRef,
-) -> Option<GitObject<'a>> {
+) -> Option<GitObject> {
     let hash = match r {
         GitRef::Simple(simple) => simple.hash,
         GitRef::Tag(tag) => tag.hash,
@@ -203,12 +203,12 @@ fn read_commit_from_ref<'a>(
     None
 }
 
-fn read_object_from_hash<'a>(
+fn read_object_from_hash(
     compression: &mut Decompression,
     repository_path: &Path,
     pack_reader: &PackReader,
     hash: ObjectHash,
-) -> Option<GitObject<'a>> {
+) -> Option<GitObject> {
     if let Some(obj) = pack_reader.read_git_object(compression, hash.clone()) {
         return Some(obj);
     }

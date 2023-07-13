@@ -59,11 +59,11 @@ impl PackReader {
         })
     }
 
-    pub fn read_git_object<'a>(
+    pub fn read_git_object(
         &self,
         compression: &mut Decompression,
         object_hash: ObjectHash,
-    ) -> Option<GitObject<'a>> {
+    ) -> Option<GitObject> {
         if let Some((mmap, offset)) = get_offset(self, &object_hash) {
             let bytes: Box<[u8]>;
 

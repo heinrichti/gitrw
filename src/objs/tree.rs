@@ -6,8 +6,8 @@ use crate::shared::{self, RefSlice};
 
 use super::{ObjectHash, Tree, TreeHash};
 
-impl<'a> Tree<'a> {
-    pub fn create(object_hash: TreeHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree<'a> {
+impl Tree {
+    pub fn create(object_hash: TreeHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree {
         let mut result = Tree {
             _object_hash: object_hash,
             lines: vec![],
@@ -25,7 +25,7 @@ impl<'a> Tree<'a> {
         let mut lines = Vec::new();
 
         while let Some(null_terminator_index) = null_terminator_index_opt {
-            let text = RefSlice::from_slice(&bytes[position..position + null_terminator_index]);
+            let text = RefSlice::new(position, null_terminator_index);
 
             let tree_hash: TreeHash = bytes
                 [position + null_terminator_index + 1..position + null_terminator_index + 21]
@@ -48,9 +48,9 @@ impl<'a> Tree<'a> {
 }
 
 #[derive(Debug)]
-pub struct TreeLine<'a> {
+pub struct TreeLine {
     hash: TreeHash,
-    text: shared::RefSlice<'a, u8>,
+    text: shared::RefSlice<u8>,
 }
 
 impl Display for TreeHash {
@@ -81,10 +81,11 @@ impl From<ObjectHash> for TreeHash {
     }
 }
 
-impl Display for Tree<'_> {
+impl Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.lines.iter() {
-            writeln!(f, "{} {}", line.hash, line.text.as_bstr())?;
+            let text = line.text.get(&self._bytes).as_bstr();
+            writeln!(f, "{} {}", line.hash, text)?;
         }
         Ok(())
     }

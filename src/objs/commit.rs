@@ -1,4 +1,4 @@
-use std::{fmt::Display, hash::Hasher, ops::Deref, vec};
+use std::{fmt::Display, hash::Hasher, vec};
 
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
 use rs_sha1::{HasherContext, Sha1Hasher};
@@ -27,19 +27,19 @@ impl TryFrom<&BStr> for CommitHash {
     }
 }
 
-impl<'a> Display for Commit<'a> {
+impl Display for Commit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}", self.hash()))?;
         Ok(())
     }
 }
 
-impl<'a> Commit<'a> {
-    pub fn create(hash: Option<CommitHash>, bytes: Box<[u8]>, skip_first_null: bool) -> Commit<'a> {
+impl Commit {
+    pub fn create(hash: Option<CommitHash>, bytes: Box<[u8]>, skip_first_null: bool) -> Commit {
         let mut line_reader: Lines<'_>;
         let mut commit = Commit {
             hash: Some(hash.unwrap_or_else(|| CommitHash(Self::calculate_hash(&bytes)))),
-            _bytes: bytes,
+            bytes,
             tree_line: RefSlice::Owned(vec![]),
             parents: vec![],
             author: RefSlice::Owned(vec![]),
@@ -49,7 +49,7 @@ impl<'a> Commit<'a> {
             _remainder: RefSlice::Owned(vec![]),
         };
 
-        let bytes = &commit._bytes;
+        let bytes = &commit.bytes;
 
         if skip_first_null {
             let mut null_idx = 0;
@@ -64,34 +64,32 @@ impl<'a> Commit<'a> {
             line_reader = bytes.lines();
         }
 
-        let tree_line = line_reader
-            .next()
-            .map(|line| RefSlice::<'a>::from_slice(&line[5..]))
-            .unwrap();
+        let mut line = line_reader.next().unwrap();
+        let tree_line = RefSlice::from_slice(bytes, line, 5);
 
         let mut parents = Vec::with_capacity(1);
-        let mut line = line_reader.next().unwrap();
+        line = line_reader.next().unwrap();
         while line.starts_with(b"parent ") {
-            parents.push(RefSlice::from_slice(&line[7..]));
+            parents.push(RefSlice::from_slice(bytes, line, 7));
             line = line_reader.next().unwrap();
         }
 
         let author_line = &line[7..];
         let author_time = Self::time_index(author_line);
-        let author = RefSlice::from_slice(&author_line[0..author_time]);
-        let author_time = RefSlice::from_slice(&author_line[author_time + 1..]);
+        let author = RefSlice::from_slice(bytes, &author_line[0..author_time], 0);
+        let author_time = RefSlice::from_slice(bytes, line, author_time + 1);
 
         let committer_line = line_reader.next().map(|line| &line[10..]).unwrap();
         let committer_time_index = Self::time_index(committer_line);
-        let committer = RefSlice::from_slice(&committer_line[0..committer_time_index]);
-        let committer_time = RefSlice::from_slice(&committer_line[committer_time_index + 1..]);
+        let committer = RefSlice::from_slice(bytes, &committer_line[0..committer_time_index], 0);
+        let committer_time = RefSlice::from_slice(bytes, committer_line, committer_time_index + 1);
 
         let committer_line_start: usize =
             unsafe { committer_line.as_ptr().offset_from(bytes.as_ptr()) }
                 .try_into()
                 .unwrap();
         let remainder_start: usize = committer_line_start + committer_line.len() + 1;
-        let remainder = RefSlice::from_slice(&bytes[remainder_start..]);
+        let remainder = RefSlice::new(remainder_start, bytes.len() - remainder_start);
 
         commit.tree_line = tree_line;
         commit.parents = parents;
@@ -124,7 +122,11 @@ impl<'a> Commit<'a> {
     }
 
     pub fn tree(&self) -> TreeHash {
-        self.tree_line.as_bstr().try_into().unwrap()
+        self.tree_line
+            .get(&self.bytes)
+            .as_bstr()
+            .try_into()
+            .unwrap()
     }
 
     pub fn set_tree(&mut self, value: TreeHash) {
@@ -135,7 +137,7 @@ impl<'a> Commit<'a> {
     pub fn parents(&self) -> Vec<CommitHash> {
         let mut result = Vec::with_capacity(self.parents.len());
         for parent in self.parents.iter() {
-            result.push(parent.as_bstr().try_into().unwrap());
+            result.push(parent.get(&self.bytes).as_bstr().try_into().unwrap());
         }
 
         result
@@ -146,12 +148,12 @@ impl<'a> Commit<'a> {
         self.hash = None;
     }
 
-    pub fn author(&'a self) -> &'a bstr::BStr {
-        self.author.as_bstr()
+    pub fn author(&self) -> &bstr::BStr {
+        self.author.get(&self.bytes).as_bstr()
     }
 
-    pub fn author_bytes(&'a self) -> &'a [u8] {
-        &self.author
+    pub fn author_bytes(&self) -> &[u8] {
+        self.author.get(&self.bytes)
     }
 
     pub fn set_author(&mut self, author: Vec<u8>) {
@@ -175,12 +177,12 @@ impl<'a> Commit<'a> {
         line.len()
     }
 
-    pub fn committer(&'a self) -> &'a bstr::BStr {
-        self.committer.as_bstr()
+    pub fn committer(&self) -> &bstr::BStr {
+        self.committer.get(&self.bytes).as_bstr()
     }
 
-    pub fn committer_bytes(&'a self) -> &'a [u8] {
-        &self.committer
+    pub fn committer_bytes(&self) -> &[u8] {
+        self.committer.get(&self.bytes)
     }
 
     pub fn set_committer(&mut self, committer: Vec<u8>) {
@@ -191,52 +193,51 @@ impl<'a> Commit<'a> {
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut result: Vec<u8> = Vec::with_capacity(
             b"tree \n".len()
-                + self.tree_line.len()
+                + self.tree_line.get(&self.bytes).len()
                 + self
                     .parents
                     .iter()
-                    .map(|parent| b"parent \n".len() + parent.len())
+                    .map(|parent| b"parent \n".len() + parent.get(&self.bytes).len())
                     .sum::<usize>()
                 + b"author  \n".len()
-                + self.committer.len()
-                + self.committer_time.len()
+                + self.committer.get(&self.bytes).len()
+                + self.committer_time.get(&self.bytes).len()
                 + b"committer  \n".len()
-                + self.author.len()
-                + self.author_time.len()
-                + self._remainder.len(),
+                + self.author.get(&self.bytes).len()
+                + self.author_time.get(&self.bytes).len()
+                + self._remainder.get(&self.bytes).len(),
         );
 
         result.push_str(b"tree ");
-        result.push_str(self.tree_line.deref());
+        result.push_str(self.tree_line.get(&self.bytes));
         result.push_str(b"\n");
 
         for parent in &self.parents {
             result.push_str(b"parent ");
-            result.push_str(parent.deref());
+            result.push_str(parent.get(&self.bytes));
             result.push_str(b"\n");
         }
 
         result.push_str(b"author ");
-        result.push_str(self.author.deref());
+        result.push_str(self.author.get(&self.bytes));
         result.push_str(b" ");
-        result.push_str(self.author_time.deref());
+        result.push_str(self.author_time.get(&self.bytes));
         result.push_str(b"\n");
 
         result.push_str(b"committer ");
-        result.push_str(self.committer.deref());
         result.push_str(b" ");
-        result.push_str(self.committer_time.deref());
+        result.push_str(self.committer_time.get(&self.bytes));
         result.push_str(b"\n");
 
-        result.push_str(self._remainder.deref());
+        result.push_str(self._remainder.get(&self.bytes));
 
         result.into_boxed_slice()
     }
 }
 
-impl<'a> WriteObject for Commit<'a> {
+impl WriteObject for Commit {
     fn to_bytes(&self) -> &[u8] {
-        &self._bytes
+        &self.bytes
     }
 
     fn hash(&self) -> &ObjectHash {

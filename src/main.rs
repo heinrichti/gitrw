@@ -163,10 +163,10 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 //     Ok(())
 // }
 
-fn parent_if_empty<'a, T: BuildHasher>(
-    commit: &'a Commit,
-    rewritten_commits: &'a HashMap<CommitHash, CommitHash, T>,
-    commit_trees: &'a HashMap<CommitHash, TreeHash, T>,
+fn parent_if_empty<T: BuildHasher>(
+    commit: &Commit,
+    rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
+    commit_trees: &HashMap<CommitHash, TreeHash, T>,
 ) -> Option<CommitHash> {
     let parents = commit.parents();
     if parents.len() == 1 {
@@ -229,7 +229,7 @@ pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(
 
 use rayon::prelude::*;
 
-fn write_commits(rx: Receiver<Commit<'_>>, dry_run: bool, repository_path: PathBuf) {
+fn write_commits(rx: Receiver<Commit>, dry_run: bool, repository_path: PathBuf) {
     rx.into_iter()
         .filter(|_| !dry_run)
         .par_bridge()

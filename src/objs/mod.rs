@@ -13,32 +13,32 @@ pub struct TreeHash(ObjectHash);
 pub struct CommitHash(pub(crate) ObjectHash);
 
 #[derive(Debug)]
-pub struct Commit<'a> {
+pub struct Commit {
     hash: Option<CommitHash>,
-    _bytes: Box<[u8]>,
-    tree_line: RefSlice<'a, u8>,
-    parents: Vec<RefSlice<'a, u8>>,
-    author: RefSlice<'a, u8>,
-    author_time: RefSlice<'a, u8>,
-    committer: RefSlice<'a, u8>,
-    committer_time: RefSlice<'a, u8>,
-    _remainder: RefSlice<'a, u8>,
+    bytes: Box<[u8]>,
+    tree_line: RefSlice<u8>,
+    parents: Vec<RefSlice<u8>>,
+    author: RefSlice<u8>,
+    author_time: RefSlice<u8>,
+    committer: RefSlice<u8>,
+    committer_time: RefSlice<u8>,
+    _remainder: RefSlice<u8>,
 }
 
 #[derive(Debug)]
-pub struct Tag<'a> {
-    _bytes: Box<[u8]>,
-    object: RefSlice<'a, u8>,
-    obj_type: RefSlice<'a, u8>,
-    remainder: RefSlice<'a, u8>,
+pub struct Tag {
+    bytes: Box<[u8]>,
+    object: RefSlice<u8>,
+    obj_type: RefSlice<u8>,
+    remainder: RefSlice<u8>,
 }
 
 #[derive(Debug)]
-pub enum GitObject<'a> {
-    Commit(Commit<'a>),
-    Tree(Tree<'a>),
+pub enum GitObject {
+    Commit(Commit),
+    Tree(Tree),
     // Blob(Blob),
-    Tag(Tag<'a>),
+    Tag(Tag),
 }
 
 #[derive(PartialEq, Eq)]
@@ -48,8 +48,8 @@ pub enum TagTargetType {
 }
 
 #[derive(Debug)]
-pub struct Tree<'a> {
+pub struct Tree {
     _object_hash: TreeHash,
-    lines: Vec<TreeLine<'a>>,
+    lines: Vec<TreeLine>,
     _bytes: Box<[u8]>,
 }
