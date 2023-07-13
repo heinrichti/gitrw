@@ -28,7 +28,12 @@ impl Default for Decompression {
 }
 
 pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
-    let file = File::create_new(path).unwrap();
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .unwrap();
     let mut buf_writer = BufWriter::new(file);
     let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
 

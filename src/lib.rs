@@ -1,4 +1,3 @@
-#![feature(file_create_new)]
 use std::{
     error::Error,
     path::{Path, PathBuf},
