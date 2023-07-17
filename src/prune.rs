@@ -45,7 +45,6 @@ fn find_empty_commits(
 
     for mut commit in repository.commits_topo() {
         if let Some(parent) = parent_if_empty(&commit, &rewritten_commits, &commit_trees) {
-            println!("Empty commit {} -> {}", commit.hash(), parent);
             rewritten_commits.insert(commit.hash().clone(), parent);
             continue;
         }
@@ -81,9 +80,6 @@ pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(
     let rewritten_commits = find_empty_commits(&mut repository, tx);
 
     thread.join().unwrap();
-
-    println!();
-    println!("Updating refs...");
 
     refs::GitRef::update(&mut repository, &rewritten_commits);
 
