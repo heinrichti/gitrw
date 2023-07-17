@@ -92,7 +92,9 @@ impl GitRef {
 
         let mut path = repository.path.clone();
         path.push("packed-refs");
-        std::fs::remove_file(path).unwrap();
+        if path.exists() {
+            std::fs::remove_file(path).unwrap();
+        }
     }
 
     fn write_ref(repository_path: &str, ref_name: &str, ref_target: &str) {
