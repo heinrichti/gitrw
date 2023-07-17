@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
 
-use crate::{shared::RefSlice, WriteObject};
+use crate::shared::RefSlice;
 
 use super::{Commit, CommitHash, ObjectHash, TreeHash};
 
@@ -169,6 +169,10 @@ impl Commit {
         self.hash = None;
     }
 
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.bytes[self.bytes_start..]
+    }
+
     pub fn to_bytes(&self) -> Box<[u8]> {
         let mut result: Vec<u8> = Vec::with_capacity(
             b"tree \n".len()
@@ -214,19 +218,5 @@ impl Commit {
         debug_assert_eq!(result.capacity(), result.len());
 
         result.into_boxed_slice()
-    }
-}
-
-impl WriteObject for Commit {
-    fn to_bytes(&self) -> &[u8] {
-        &self.bytes[self.bytes_start..]
-    }
-
-    fn hash(&self) -> &ObjectHash {
-        &self.hash().0
-    }
-
-    fn prefix(&self) -> &str {
-        "commit"
     }
 }

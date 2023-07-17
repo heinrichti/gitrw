@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 use crate::{
     objs::{CommitHash, Tag, TagTargetType},
     shared::ObjectHash,
-    Repository, WriteObject,
+    Repository,
 };
 
 trait RefName {
@@ -146,8 +146,9 @@ impl GitRef {
 
                     target_tag.set_object(target_tag_object.clone().0);
                     let tag = Tag::create(None, target_tag.to_bytes(), false);
-                    Repository::write(repository.path.clone(), &tag);
-                    let target_hash = tag.hash().clone();
+                    let tag_hash = tag.hash().clone();
+                    Repository::write(repository.path.clone(), tag.into());
+                    let target_hash = tag_hash;
 
                     Self::write_ref(
                         repository.path.to_str().unwrap(),
@@ -158,8 +159,9 @@ impl GitRef {
                     target_hash.clone()
                 }
                 TagTargetType::Tree => {
-                    Repository::write(repository.path.clone(), &target_tag);
-                    target_tag.hash().clone()
+                    let target_tag_hash = target_tag.hash().clone();
+                    Repository::write(repository.path.clone(), target_tag.into());
+                    target_tag_hash
                 }
                 TagTargetType::Tag => {
                     panic!("Did not expect a tag to point to another tag");

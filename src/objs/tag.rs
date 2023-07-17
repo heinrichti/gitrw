@@ -1,6 +1,6 @@
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
 
-use crate::{objs::TagTargetType, shared::RefSlice, WriteObject};
+use crate::{objs::TagTargetType, shared::RefSlice};
 
 use super::{ObjectHash, Tag};
 
@@ -48,6 +48,10 @@ impl Tag {
         }
     }
 
+    pub fn hash(&self) -> &ObjectHash {
+        self.hash.as_ref().unwrap()
+    }
+
     pub fn object(&self) -> ObjectHash {
         self.object.get(&self.bytes).as_bstr().try_into().unwrap()
     }
@@ -83,6 +87,10 @@ impl Tag {
         );
     }
 
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.bytes[self.bytes_start..]
+    }
+
     pub fn to_bytes(&self) -> Box<[u8]> {
         let byte_size: usize = b"object \n".len()
             + self.object.get(&self.bytes).len()
@@ -109,19 +117,5 @@ impl Tag {
         result.push_str(self.remainder.get(&self.bytes));
 
         result.into_boxed_slice()
-    }
-}
-
-impl WriteObject for Tag {
-    fn hash(&self) -> &ObjectHash {
-        self.hash.as_ref().unwrap()
-    }
-
-    fn to_bytes(&self) -> &[u8] {
-        &self.bytes[self.bytes_start..]
-    }
-
-    fn prefix(&self) -> &str {
-        "tag"
     }
 }

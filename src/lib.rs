@@ -7,7 +7,7 @@ use std::{
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
-use objs::{Commit, GitObject};
+use objs::{Commit, GitObject, Tag};
 use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
@@ -33,10 +33,30 @@ pub struct Repository {
     decompression: Decompression,
 }
 
-pub trait WriteObject {
-    fn hash(&self) -> &ObjectHash;
-    fn to_bytes(&self) -> &[u8];
-    fn prefix(&self) -> &str;
+pub struct WriteObject {
+    hash: ObjectHash,
+    prefix: String,
+    bytes: Vec<u8>,
+}
+
+impl From<Commit> for WriteObject {
+    fn from(value: Commit) -> Self {
+        Self {
+            hash: value.hash().0.clone(),
+            prefix: String::from("commit"),
+            bytes: value.bytes().to_owned(),
+        }
+    }
+}
+
+impl From<Tag> for WriteObject {
+    fn from(value: Tag) -> Self {
+        Self {
+            hash: value.hash().clone(),
+            prefix: String::from("tag"),
+            bytes: value.bytes().to_owned(),
+        }
+    }
 }
 
 pub fn calculate_hash(data: &[u8], prefix: &[u8]) -> ObjectHash {
@@ -67,19 +87,19 @@ impl Repository {
         commits::read_object_from_hash(&mut self.decompression, &self.path, &self.pack_reader, hash)
     }
 
-    pub fn write(mut file_path: PathBuf, object: &impl WriteObject) {
-        let hash = object.hash().to_string();
-        let data = object.to_bytes();
-        let prefix = object.prefix();
+    pub fn write(mut repo_path: PathBuf, object: WriteObject) {
+        let hash = object.hash.to_string();
+        let data = object.bytes;
+        let prefix = object.prefix;
 
-        file_path.push("objects");
-        file_path.push(&hash[0..2]);
+        repo_path.push("objects");
+        repo_path.push(&hash[0..2]);
 
-        std::fs::create_dir_all(&file_path).unwrap();
+        std::fs::create_dir_all(&repo_path).unwrap();
 
-        file_path.push(&hash[2..]);
-        if !Path::new(&file_path).exists() {
-            compression::pack_file(&file_path, prefix, data);
+        repo_path.push(&hash[2..]);
+        if !Path::new(&repo_path).exists() {
+            compression::pack_file(&repo_path, prefix.as_str(), &data);
         }
     }
 
@@ -92,7 +112,7 @@ impl Repository {
             .par_bridge()
             .filter(|_| !dry_run)
             .for_each(|commit| {
-                Self::write(repository_path.clone(), &commit);
+                Self::write(repository_path.clone(), commit.into());
             });
     }
 
