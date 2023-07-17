@@ -1,12 +1,25 @@
-use std::{error::Error, fs::File, io::BufReader, path::Path};
+use std::{
+    error::Error,
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+};
 
 use bstr::{
     io::{BufReadExt, ByteLines},
-    BString, ByteSlice,
+    BStr, BString, ByteSlice,
+};
+use rustc_hash::FxHashMap;
+
+use crate::{
+    objs::{CommitHash, Tag, TagTargetType},
+    shared::ObjectHash,
+    Repository, WriteObject,
 };
 
 trait RefName {
-    fn get_name(&self) -> &BString;
+    fn get_name(&self) -> &BStr;
+    fn get_target(&self) -> &BStr;
 }
 
 #[derive(Debug)]
@@ -16,10 +29,17 @@ pub enum GitRef {
 }
 
 impl RefName for GitRef {
-    fn get_name(&self) -> &BString {
+    fn get_name(&self) -> &BStr {
         match self {
-            GitRef::Simple(simple) => &simple.name,
-            GitRef::Tag(tag) => &tag.name,
+            GitRef::Simple(simple) => simple.name[..].as_bstr(),
+            GitRef::Tag(tag) => tag.name[..].as_bstr(),
+        }
+    }
+
+    fn get_target(&self) -> &BStr {
+        match self {
+            GitRef::Simple(simple) => simple.hash[..].as_bstr(),
+            GitRef::Tag(tag) => tag.hash[..].as_bstr(),
         }
     }
 }
@@ -60,6 +80,98 @@ impl GitRef {
         }
 
         Ok(refs)
+    }
+
+    pub fn update(
+        repository: &mut Repository,
+        rewritten_commits: &FxHashMap<CommitHash, CommitHash>,
+    ) {
+        for r in repository.refs().unwrap() {
+            Self::rewrite_ref(repository, r.get_name(), r.get_target(), rewritten_commits);
+        }
+
+        // TODO delete packed refs
+        // todo!()
+    }
+
+    fn rewrite_ref(
+        repository: &mut Repository,
+        ref_name: &BStr,
+        ref_target: &BStr,
+        rewritten_commits: &FxHashMap<CommitHash, CommitHash>,
+    ) -> ObjectHash {
+        let tag_target_obj = repository
+            .read_object(ref_target.try_into().unwrap())
+            .unwrap();
+        match tag_target_obj {
+            crate::objs::GitObject::Commit(_) => {
+                let mut ref_path_buf = repository.path.clone();
+                ref_path_buf.push(ref_name.to_string());
+                let file_name = ref_path_buf.file_name().unwrap();
+                let ref_path = ref_path_buf.to_str().unwrap();
+                let dir_path = &ref_path[0..ref_path.len() - file_name.len()];
+
+                std::fs::create_dir_all(dir_path).unwrap();
+
+                let tag_target: CommitHash = ref_target.try_into().unwrap();
+                let rewritten_target = rewritten_commits.get(&tag_target);
+                match rewritten_target {
+                    Some(new_target) => {
+                        std::fs::write(ref_path, new_target.to_string()).unwrap();
+                        new_target.clone().0
+                    }
+                    None => tag_target.0,
+                }
+            }
+            crate::objs::GitObject::Tree(tree) => {
+                println!(
+                    "Skipping tag pointing to tree (not supported yet): {}",
+                    ref_name
+                );
+                tree.hash().clone().0
+            }
+            crate::objs::GitObject::Tag(mut target_tag) => match target_tag.target_type() {
+                TagTargetType::Commit => {
+                    let target_tag_object = rewritten_commits.get(&CommitHash(target_tag.object()));
+                    let target_hash = target_tag_object.map(|target_tag_object| {
+                        target_tag.set_object(target_tag_object.clone().0);
+                        let tag = Tag::create(None, target_tag.to_bytes(), false);
+                        Repository::write(repository.path.clone(), &tag);
+                        tag.hash().clone()
+                    });
+
+                    match target_hash {
+                        Some(target_hash) => {
+                            let path: PathBuf = [
+                                repository.path.to_str().unwrap(),
+                                ref_name.to_str().unwrap(),
+                            ]
+                            .iter()
+                            .collect();
+
+                            let file_name = path.file_name().unwrap();
+                            let ref_path = path.to_str().unwrap();
+                            let dir_path = &ref_path[0..ref_path.len() - file_name.len()];
+                            std::fs::create_dir_all(dir_path).unwrap();
+
+                            std::fs::write(path, target_hash.to_string()).unwrap();
+                            target_hash.clone()
+                        }
+                        None => target_tag.hash().clone(),
+                    }
+                }
+                TagTargetType::Tree => {
+                    println!(
+                        "Skipping tag pointing to tree (not supported yet): {}",
+                        target_tag.name()
+                    );
+                    target_tag.hash().clone()
+                }
+                TagTargetType::Tag => {
+                    panic!("Did not expect a tag to point to another tag");
+                }
+            },
+        }
     }
 }
 

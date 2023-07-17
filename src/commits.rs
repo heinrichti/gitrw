@@ -203,7 +203,7 @@ fn read_commit_from_ref(
     None
 }
 
-fn read_object_from_hash(
+pub(crate) fn read_object_from_hash(
     compression: &mut Decompression,
     repository_path: &Path,
     pack_reader: &PackReader,
@@ -227,7 +227,7 @@ fn read_object_from_hash(
         }
 
         if bytes.starts_with(b"tag ") {
-            return Some(GitObject::Tag(Tag::create(hash, bytes, true)));
+            return Some(GitObject::Tag(Tag::create(hash.into(), bytes, true)));
         }
 
         if bytes.starts_with(b"blob ") {

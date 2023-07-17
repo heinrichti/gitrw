@@ -8,21 +8,22 @@ use std::{
 use flate2::Status;
 use libdeflater::Decompressor;
 use memmap2::Mmap;
+use once_cell::sync::Lazy;
 
 use crate::packreader::PackObject;
 
 pub struct Decompression {
     libdeflate_decompressor: Decompressor,
     flate2_decompressor: flate2::Decompress,
+    file_buf: Lazy<[u8; 8192]>,
 }
-
-static mut FILE_BUF: [u8; 8192] = [0u8; 8192];
 
 impl Default for Decompression {
     fn default() -> Self {
         Self {
             libdeflate_decompressor: Decompressor::new(),
             flate2_decompressor: flate2::Decompress::new(false),
+            file_buf: Lazy::new(|| [0u8; 8192]),
         }
     }
 }
@@ -99,15 +100,21 @@ impl Decompression {
 
         self.flate2_decompressor.reset(false);
 
+        let buffer = &mut self.file_buf[..];
+
         let mut status = Status::Ok;
         while status == Status::Ok {
-            let bytes_read = buf_reader.read(unsafe { &mut FILE_BUF }).unwrap();
+            let bytes_read = buf_reader.read(buffer.as_mut()).unwrap();
+            if bytes_read == 0 {
+                break;
+            }
+
             output_buf.reserve(bytes_read * 2);
 
             status = self
                 .flate2_decompressor
                 .decompress_vec(
-                    unsafe { &FILE_BUF[0..bytes_read] },
+                    &buffer[0..bytes_read],
                     &mut output_buf,
                     flate2::FlushDecompress::None,
                 )

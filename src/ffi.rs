@@ -3,14 +3,12 @@ use std::path::PathBuf;
 
 use crate::{objs::CommitHash, Repository};
 use bstr::ByteSlice;
-use interoptopus::{ffi_function, ffi_type, function, Inventory, InventoryBuilder};
 
 use crate::{
     commits::{CommitsFifoIter, CommitsLifoIter},
     objs::Commit,
 };
 
-#[ffi_type(opaque)]
 #[repr(C)]
 pub struct FfiRepository<'a> {
     repository: Repository,
@@ -18,13 +16,11 @@ pub struct FfiRepository<'a> {
     commits_lifo: Option<CommitsLifoIter<'a>>,
 }
 
-#[ffi_type(opaque)]
 #[repr(C)]
 pub struct CommitFfi {
     commit: Commit,
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_new(slice_ptr: &mut u8, len: u64) -> *mut FfiRepository<'static> {
     let x = slice::from_raw_parts(slice_ptr, len.try_into().unwrap());
@@ -38,7 +34,6 @@ pub unsafe extern "C" fn repo_new(slice_ptr: &mut u8, len: u64) -> *mut FfiRepos
     }))
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_destroy(handle: *mut FfiRepository) {
     unsafe {
@@ -46,21 +41,18 @@ pub unsafe extern "C" fn repo_destroy(handle: *mut FfiRepository) {
     };
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_commits_topo_init(handle: *mut FfiRepository) {
     let repo: &mut FfiRepository = unsafe { handle.as_mut().unwrap() };
     repo.commits_topo = Some(repo.repository.commits_topo());
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_commits_lifo_init(handle: *mut FfiRepository) {
     let repo: &mut FfiRepository = unsafe { handle.as_mut().unwrap() };
     repo.commits_lifo = Some(repo.repository.commits_lifo());
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_commits_topo_next(
     handle: *mut FfiRepository<'static>,
@@ -78,7 +70,6 @@ pub unsafe extern "C" fn repo_commits_topo_next(
     }
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn repo_commits_lifo_next(
     handle: *mut FfiRepository<'static>,
@@ -96,7 +87,6 @@ pub unsafe extern "C" fn repo_commits_lifo_next(
     }
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn commit_destroy(handle: *mut CommitFfi) {
     unsafe {
@@ -104,7 +94,6 @@ pub unsafe extern "C" fn commit_destroy(handle: *mut CommitFfi) {
     }
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn commit_author(handle: *const CommitFfi, len: *mut u32) -> *const u8 {
     let commit = &unsafe { handle.as_ref() }.unwrap().commit;
@@ -112,7 +101,6 @@ pub unsafe extern "C" fn commit_author(handle: *const CommitFfi, len: *mut u32) 
     commit.author_bytes().as_ptr()
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn commit_committer(handle: *const CommitFfi, len: *mut u32) -> *const u8 {
     let commit = &unsafe { handle.as_ref() }.unwrap().commit;
@@ -120,26 +108,10 @@ pub unsafe extern "C" fn commit_committer(handle: *const CommitFfi, len: *mut u3
     commit.committer_bytes().as_ptr()
 }
 
-#[ffi_function]
 #[no_mangle]
 pub unsafe extern "C" fn commit_hash(handle: *const CommitFfi) -> *const [u8; 20] {
     let commit = &unsafe { handle.as_ref() }.unwrap().commit;
 
     let x: *const CommitHash = commit.hash();
     unsafe { std::mem::transmute(x) }
-}
-
-pub fn ffi_inventory() -> Inventory {
-    InventoryBuilder::new()
-        .register(function!(repo_new))
-        .register(function!(repo_commits_topo_init))
-        .register(function!(repo_commits_lifo_init))
-        .register(function!(repo_commits_topo_next))
-        .register(function!(repo_commits_lifo_next))
-        .register(function!(repo_destroy))
-        .register(function!(commit_destroy))
-        .register(function!(commit_hash))
-        .register(function!(commit_author))
-        .register(function!(commit_committer))
-        .inventory()
 }

@@ -1,22 +1,10 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    fmt::Display,
-    hash::BuildHasher,
-    io::BufWriter,
-    path::PathBuf,
-    sync::mpsc::{channel, Receiver, Sender},
-    thread,
-};
+use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
-use libgitrw::{
-    objs::{Commit, CommitHash, TreeHash},
-    Repository,
-};
+use libgitrw::{prune, Repository};
 #[cfg(not(test))]
 use mimalloc::MiMalloc;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::io::Write;
 
 #[cfg(not(test))]
@@ -106,8 +94,7 @@ fn main() {
 
         Commands::PruneEmpty => {
             println!("Pruning empty commits");
-
-            remove_empty_commits(repository_path, cli.dry_run).unwrap();
+            prune::remove_empty_commits(repository_path, cli.dry_run).unwrap();
         }
     };
 }
@@ -162,81 +149,6 @@ pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>>
 
 //     Ok(())
 // }
-
-fn parent_if_empty<T: BuildHasher>(
-    commit: &Commit,
-    rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
-    commit_trees: &HashMap<CommitHash, TreeHash, T>,
-) -> Option<CommitHash> {
-    let parents = commit.parents();
-    if parents.len() == 1 {
-        let commit_tree = commit.tree();
-        let parent = parents.first().unwrap();
-        let parent = rewritten_commits.get(parent).unwrap_or(parent).clone();
-
-        let parent_tree = &commit_trees[&parent];
-        if parent_tree == &commit_tree {
-            Some(parent)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-fn find_empty_commits(repository_path: PathBuf, tx: Sender<Commit>) {
-    let mut repository = Repository::create(repository_path);
-    let mut rewritten_commits: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
-    let mut commit_trees: FxHashMap<CommitHash, TreeHash> = FxHashMap::default();
-
-    for mut commit in repository.commits_topo() {
-        if let Some(parent) = parent_if_empty(&commit, &rewritten_commits, &commit_trees) {
-            println!("Empty commit {} -> {}", commit.hash(), parent);
-            rewritten_commits.insert(commit.hash().clone(), parent);
-            continue;
-        }
-
-        let commit_hash = commit.hash().clone();
-        commit
-            .parents()
-            .iter()
-            .map(|parent| rewritten_commits.get(parent).unwrap_or(parent).clone())
-            .enumerate()
-            .for_each(|(i, parent)| commit.set_parent(i, parent));
-
-        let commit = Commit::create(None, commit.to_bytes(), false);
-        commit_trees.insert(commit.hash().clone(), commit.tree());
-
-        if &commit_hash != commit.hash() {
-            rewritten_commits.insert(commit_hash, commit.hash().clone());
-            tx.send(commit).unwrap();
-        }
-    }
-}
-
-pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(), Box<dyn Error>> {
-    let write_path = repository_path.clone();
-    let (tx, rx) = channel();
-
-    let thread = thread::spawn(move || find_empty_commits(repository_path.clone(), tx));
-    write_commits(rx, dry_run, write_path);
-
-    thread.join().unwrap();
-
-    Ok(())
-}
-
-use rayon::prelude::*;
-
-fn write_commits(rx: Receiver<Commit>, dry_run: bool, repository_path: PathBuf) {
-    rx.into_iter()
-        .filter(|_| !dry_run)
-        .par_bridge()
-        .for_each(|commit| {
-            Repository::write(repository_path.clone(), commit);
-        });
-}
 
 #[cfg(test)]
 mod tests {

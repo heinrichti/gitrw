@@ -61,7 +61,7 @@ impl PackReader {
 
     pub fn read_git_object(
         &self,
-        compression: &mut Decompression,
+        decompression: &mut Decompression,
         object_hash: ObjectHash,
     ) -> Option<GitObject> {
         if let Some((mmap, offset)) = get_offset(self, &object_hash) {
@@ -70,19 +70,19 @@ impl PackReader {
             let mut pack_object = PackObject::create(mmap, offset);
             if pack_object.object_type == 6 {
                 // diff
-                (bytes, pack_object) = restore_diff_object_bytes(compression, mmap, pack_object);
+                (bytes, pack_object) = restore_diff_object_bytes(decompression, mmap, pack_object);
             } else if pack_object.object_type == 7 {
                 panic!("OBJ_REF_DELTA not implemented");
             } else {
                 // plain object, should be easy to extract
-                bytes = compression.unpack(mmap, &pack_object, 0);
+                bytes = decompression.unpack(mmap, &pack_object, 0);
             }
 
             let git_object = match pack_object.object_type {
                 1u8 => GitObject::Commit(Commit::create(Some(object_hash.into()), bytes, false)),
                 2u8 => GitObject::Tree(Tree::create(object_hash.into(), bytes, false)),
                 // 3u8 => GitObject::Blob(Blob::create(object_hash, bytes)),
-                4u8 => GitObject::Tag(Tag::create(object_hash, bytes, false)),
+                4u8 => GitObject::Tag(Tag::create(object_hash.into(), bytes, false)),
                 _ => panic!("unknown git object type"),
             };
 

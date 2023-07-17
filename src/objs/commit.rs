@@ -1,7 +1,6 @@
-use std::{fmt::Display, hash::Hasher, vec};
+use std::fmt::Display;
 
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
-use rs_sha1::{HasherContext, Sha1Hasher};
 
 use crate::{shared::RefSlice, WriteObject};
 
@@ -37,52 +36,40 @@ impl Display for Commit {
 impl Commit {
     pub fn create(hash: Option<CommitHash>, bytes: Box<[u8]>, skip_first_null: bool) -> Commit {
         let mut line_reader: Lines<'_>;
-        let mut commit = Commit {
-            hash: Some(hash.unwrap_or_else(|| CommitHash(Self::calculate_hash(&bytes)))),
-            bytes,
-            tree_line: RefSlice::Owned(vec![]),
-            parents: vec![],
-            author: RefSlice::Owned(vec![]),
-            author_time: RefSlice::Owned(vec![]),
-            committer: RefSlice::Owned(vec![]),
-            committer_time: RefSlice::Owned(vec![]),
-            _remainder: RefSlice::Owned(vec![]),
-        };
 
-        let bytes = &commit.bytes;
-
+        let mut null_idx = 0;
         if skip_first_null {
-            let mut null_idx = 0;
             for i in 0..bytes.len() {
                 if bytes[i] == b'\0' {
                     null_idx = i;
                     break;
                 }
             }
-            line_reader = bytes[null_idx + 1..].lines();
+            null_idx += 1;
+            line_reader = bytes[null_idx..].lines();
         } else {
             line_reader = bytes.lines();
         }
 
         let mut line = line_reader.next().unwrap();
-        let tree_line = RefSlice::from_slice(bytes, line, 5);
+        let tree_line = RefSlice::from_slice(&bytes, line, 5);
 
         let mut parents = Vec::with_capacity(1);
         line = line_reader.next().unwrap();
         while line.starts_with(b"parent ") {
-            parents.push(RefSlice::from_slice(bytes, line, 7));
+            parents.push(RefSlice::from_slice(&bytes, line, 7));
             line = line_reader.next().unwrap();
         }
 
         let author_line = &line[7..];
-        let author_time = Self::time_index(author_line);
-        let author = RefSlice::from_slice(bytes, &author_line[0..author_time], 0);
-        let author_time = RefSlice::from_slice(bytes, line, author_time + 1);
+        let author_time_index = Self::time_index(author_line);
+        let author = RefSlice::from_slice(&bytes, &author_line[0..author_time_index], 0);
+        let author_time = RefSlice::from_slice(&bytes, author_line, author_time_index + 1);
 
         let committer_line = line_reader.next().map(|line| &line[10..]).unwrap();
         let committer_time_index = Self::time_index(committer_line);
-        let committer = RefSlice::from_slice(bytes, &committer_line[0..committer_time_index], 0);
-        let committer_time = RefSlice::from_slice(bytes, committer_line, committer_time_index + 1);
+        let committer = RefSlice::from_slice(&bytes, &committer_line[0..committer_time_index], 0);
+        let committer_time = RefSlice::from_slice(&bytes, committer_line, committer_time_index + 1);
 
         let committer_line_start: usize =
             unsafe { committer_line.as_ptr().offset_from(bytes.as_ptr()) }
@@ -91,26 +78,18 @@ impl Commit {
         let remainder_start: usize = committer_line_start + committer_line.len() + 1;
         let remainder = RefSlice::new(remainder_start, bytes.len() - remainder_start);
 
-        commit.tree_line = tree_line;
-        commit.parents = parents;
-        commit.author = author;
-        commit.author_time = author_time;
-        commit.committer = committer;
-        commit.committer_time = committer_time;
-        commit._remainder = remainder;
-
-        commit
-    }
-
-    pub fn calculate_hash(data: &[u8]) -> ObjectHash {
-        let mut hasher = Sha1Hasher::default();
-        hasher.write(b"commit ");
-        hasher.write(data.len().to_string().as_bytes());
-        hasher.write(b"\0");
-        hasher.write(data);
-        let bytes = HasherContext::finish(&mut hasher);
-        let bytes: [u8; 20] = bytes.into();
-        ObjectHash::from(bytes)
+        Commit {
+            hash: hash.or_else(|| Some(CommitHash(crate::calculate_hash(&bytes, b"commit")))),
+            bytes,
+            bytes_start: null_idx,
+            tree_line,
+            parents,
+            author,
+            author_time,
+            committer,
+            committer_time,
+            remainder,
+        }
     }
 
     pub fn has_changes(&self) -> bool {
@@ -205,7 +184,7 @@ impl Commit {
                 + b"committer  \n".len()
                 + self.author.get(&self.bytes).len()
                 + self.author_time.get(&self.bytes).len()
-                + self._remainder.get(&self.bytes).len(),
+                + self.remainder.get(&self.bytes).len(),
         );
 
         result.push_str(b"tree ");
@@ -225,11 +204,14 @@ impl Commit {
         result.push_str(b"\n");
 
         result.push_str(b"committer ");
+        result.push_str(self.committer.get(&self.bytes));
         result.push_str(b" ");
         result.push_str(self.committer_time.get(&self.bytes));
         result.push_str(b"\n");
 
-        result.push_str(self._remainder.get(&self.bytes));
+        result.push_str(self.remainder.get(&self.bytes));
+
+        debug_assert_eq!(result.capacity(), result.len());
 
         result.into_boxed_slice()
     }
@@ -237,7 +219,7 @@ impl Commit {
 
 impl WriteObject for Commit {
     fn to_bytes(&self) -> &[u8] {
-        &self.bytes
+        &self.bytes[self.bytes_start..]
     }
 
     fn hash(&self) -> &ObjectHash {
