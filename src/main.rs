@@ -11,6 +11,7 @@ use std::io::Write;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+/// CLI tool for reading and rewriting history information of a git repository
 #[derive(clap::Parser)]
 struct Cli {
     /// Path to the mirrored/bare repository (do not use on a repository with a working copy)
