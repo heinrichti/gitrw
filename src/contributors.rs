@@ -58,7 +58,7 @@ pub fn rewrite(
         }
 
         if let Some(new_committer) = mappings.get(commit.committer_bytes()) {
-            commit.set_author(new_committer.clone());
+            commit.set_committer(new_committer.clone());
             changed = true;
         }
 
