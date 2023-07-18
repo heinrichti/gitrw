@@ -1,17 +1,21 @@
 use std::{
+    collections::HashMap,
     error::Error,
-    hash::Hasher,
+    hash::{BuildHasher, Hasher},
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
 };
 
+use bstr::BString;
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
-use objs::{Commit, GitObject, Tag};
+use objs::{Commit, CommitHash, GitObject, Tag};
 use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
 use rs_sha1::{HasherContext, Sha1Hasher};
+use rustc_hash::FxHashSet;
 use shared::ObjectHash;
 
 mod commits;
@@ -24,8 +28,6 @@ mod refs;
 mod shared;
 
 pub mod objs;
-
-pub mod prune;
 
 pub struct Repository {
     path: PathBuf,
@@ -126,5 +128,42 @@ impl Repository {
 
     pub fn refs(&self) -> Result<Vec<GitRef>, Box<dyn Error>> {
         GitRef::read_all(&self.path)
+    }
+
+    pub fn update_refs<T: BuildHasher>(
+        &mut self,
+        rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
+    ) {
+        refs::GitRef::update(self, rewritten_commits);
+    }
+
+    pub fn write_rewritten_commits_file(
+        rewritten_commits: HashMap<
+            CommitHash,
+            CommitHash,
+            std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+        >,
+    ) {
+        let file = std::fs::File::create("object-id-map.old-new.txt").unwrap();
+        let mut writer = BufWriter::new(file);
+        for (old, new) in rewritten_commits.iter() {
+            writer.write_fmt(format_args!("{old} {new}\n")).unwrap();
+        }
+
+        println!("object-id-map.old-new.txt written");
+    }
+
+    pub fn get_contributors(&mut self) -> Result<Vec<BString>, Box<dyn Error>> {
+        let mut committers = FxHashSet::default();
+
+        for commit in self.commits_lifo() {
+            committers.insert(commit.committer().to_owned());
+            committers.insert(commit.author().to_owned());
+        }
+
+        let mut committers: Vec<_> = committers.into_iter().collect();
+        committers.sort();
+
+        Ok(committers)
     }
 }

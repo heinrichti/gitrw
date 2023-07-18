@@ -1,6 +1,8 @@
 use std::{
+    collections::HashMap,
     error::Error,
     fs::File,
+    hash::BuildHasher,
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -9,7 +11,6 @@ use bstr::{
     io::{BufReadExt, ByteLines},
     BStr, BString, ByteSlice,
 };
-use rustc_hash::FxHashMap;
 
 use crate::{
     objs::{CommitHash, Tag, TagTargetType},
@@ -82,9 +83,9 @@ impl GitRef {
         Ok(refs)
     }
 
-    pub fn update(
+    pub fn update<T: BuildHasher>(
         repository: &mut Repository,
-        rewritten_commits: &FxHashMap<CommitHash, CommitHash>,
+        rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
     ) {
         for r in repository.refs().unwrap() {
             Self::rewrite_ref(repository, r.get_name(), r.get_target(), rewritten_commits);
@@ -107,11 +108,11 @@ impl GitRef {
         std::fs::write(path, ref_target).unwrap();
     }
 
-    fn rewrite_ref(
+    fn rewrite_ref<T: BuildHasher>(
         repository: &mut Repository,
         ref_name: &BStr,
         ref_target: &BStr,
-        rewritten_commits: &FxHashMap<CommitHash, CommitHash>,
+        rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
     ) -> ObjectHash {
         let tag_target_obj = repository
             .read_object(ref_target.try_into().unwrap())

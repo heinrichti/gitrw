@@ -1,11 +1,14 @@
 use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
-use libgitrw::{prune, Repository};
+use libgitrw::Repository;
 #[cfg(not(test))]
 use mimalloc::MiMalloc;
-use rustc_hash::FxHashSet;
+
 use std::io::Write;
+
+mod contributors;
+mod prune;
 
 #[cfg(not(test))]
 #[global_allocator]
@@ -71,10 +74,12 @@ fn main() {
 
     match cli.command {
         Commands::Contributor(args) => match args {
-            ContributorArgs::List => list_contributors(repository_path).unwrap(),
-            ContributorArgs::Rewrite { mapping_file: file } => {
-                println!("rewrite from file: {file}");
-                todo!();
+            ContributorArgs::List => {
+                let mut repository = Repository::create(repository_path);
+                print_locked(repository.get_contributors().unwrap().iter()).unwrap();
+            }
+            ContributorArgs::Rewrite { mapping_file } => {
+                contributors::rewrite(repository_path, mapping_file.as_str(), cli.dry_run).unwrap();
             }
         },
         Commands::Remove { file, directory } => {
@@ -107,23 +112,6 @@ fn print_locked<T: Display>(items: impl Iterator<Item = T>) -> Result<(), Box<dy
     for item in items {
         writeln!(handle, "{item}")?;
     }
-
-    Ok(())
-}
-
-pub fn list_contributors(repository_path: PathBuf) -> Result<(), Box<dyn Error>> {
-    let mut repository = Repository::create(repository_path);
-    let mut committers = FxHashSet::default();
-
-    for commit in repository.commits_lifo() {
-        committers.insert(commit.committer().to_owned());
-        committers.insert(commit.author().to_owned());
-    }
-
-    let mut committers: Vec<_> = committers.iter().collect();
-    committers.sort();
-
-    print_locked(committers.iter())?;
 
     Ok(())
 }

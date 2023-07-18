@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     error::Error,
     hash::BuildHasher,
-    io::{BufWriter, Write},
     path::PathBuf,
     sync::mpsc::{channel, Sender},
     thread,
@@ -10,9 +9,9 @@ use std::{
 
 use rustc_hash::FxHashMap;
 
-use crate::{
+use libgitrw::{
     objs::{Commit, CommitHash, TreeHash},
-    refs, Repository,
+    Repository,
 };
 
 fn parent_if_empty<T: BuildHasher>(
@@ -82,25 +81,10 @@ pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(
 
     thread.join().unwrap();
 
-    refs::GitRef::update(&mut repository, &rewritten_commits);
-
-    write_rewritten_commits(rewritten_commits);
-
-    Ok(())
-}
-
-fn write_rewritten_commits(
-    rewritten_commits: HashMap<
-        CommitHash,
-        CommitHash,
-        std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
-    >,
-) {
-    let file = std::fs::File::create("object-id-map.old-new.txt").unwrap();
-    let mut writer = BufWriter::new(file);
-    for (old, new) in rewritten_commits.iter() {
-        writer.write_fmt(format_args!("{old} {new}\n")).unwrap();
+    if !rewritten_commits.is_empty() && !dry_run {
+        repository.update_refs(&rewritten_commits);
+        Repository::write_rewritten_commits_file(rewritten_commits);
     }
 
-    println!("object-id-map.old-new.txt written");
+    Ok(())
 }
