@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use bstr::BString;
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
@@ -15,12 +14,11 @@ use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
 use rs_sha1::{HasherContext, Sha1Hasher};
-use rustc_hash::FxHashSet;
 use shared::ObjectHash;
 
 mod commits;
 mod compression;
-pub mod ffi;
+// pub mod ffi;
 mod idx_reader;
 mod pack_diff;
 mod packreader;
@@ -151,19 +149,5 @@ impl Repository {
         }
 
         println!("object-id-map.old-new.txt written");
-    }
-
-    pub fn get_contributors(&mut self) -> Result<Vec<BString>, Box<dyn Error>> {
-        let mut committers = FxHashSet::default();
-
-        for commit in self.commits_lifo() {
-            committers.insert(commit.committer().to_owned());
-            committers.insert(commit.author().to_owned());
-        }
-
-        let mut committers: Vec<_> = committers.into_iter().collect();
-        committers.sort();
-
-        Ok(committers)
     }
 }

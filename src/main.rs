@@ -1,7 +1,6 @@
 use std::{error::Error, fmt::Display, io::BufWriter, path::PathBuf};
 
 use clap::{ArgGroup, Parser, Subcommand};
-use libgitrw::Repository;
 #[cfg(not(test))]
 use mimalloc::MiMalloc;
 
@@ -65,18 +64,17 @@ enum ContributorArgs {
 
 fn main() {
     let cli = Cli::parse();
-
-    let repository_path = if let Some(repository_path) = &cli.repository {
-        PathBuf::from(repository_path)
-    } else {
-        PathBuf::from(".")
-    };
+    let repository_path = PathBuf::from(cli.repository.unwrap_or(String::from(".")));
 
     match cli.command {
         Commands::Contributor(args) => match args {
             ContributorArgs::List => {
-                let mut repository = Repository::create(repository_path);
-                print_locked(repository.get_contributors().unwrap().iter()).unwrap();
+                print_locked(
+                    contributors::get_contributors(repository_path)
+                        .unwrap()
+                        .iter(),
+                )
+                .unwrap();
             }
             ContributorArgs::Rewrite { mapping_file } => {
                 contributors::rewrite(repository_path, mapping_file.as_str(), cli.dry_run).unwrap();
@@ -99,7 +97,6 @@ fn main() {
         }
 
         Commands::PruneEmpty => {
-            println!("Pruning empty commits");
             prune::remove_empty_commits(repository_path, cli.dry_run).unwrap();
         }
     };

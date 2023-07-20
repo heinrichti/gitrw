@@ -1,11 +1,11 @@
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::mpsc::channel, thread::spawn};
 
-use bstr::{io::BufReadExt, ByteSlice};
+use bstr::{io::BufReadExt, BString, ByteSlice};
 use libgitrw::{
     objs::{Commit, CommitHash},
     Repository,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 fn split_index(line: &[u8]) -> Option<usize> {
     for (pos, c) in line.iter().enumerate() {
@@ -24,7 +24,7 @@ fn get_mappings(file_path: &str) -> Result<FxHashMap<Vec<u8>, Vec<u8>>, Box<dyn 
 
     for line in file.byte_lines() {
         let line = line?;
-        let split_pos = split_index(&line).ok_or("test")?;
+        let split_pos = split_index(&line).ok_or("Line is malformed. Pattern: old = new")?;
 
         let old = line[0..split_pos].trim().to_owned();
         let new = line[split_pos + 1..].trim().to_owned();
@@ -85,4 +85,19 @@ pub fn rewrite(
     }
 
     Ok(())
+}
+
+pub fn get_contributors(repository_path: PathBuf) -> Result<Vec<BString>, Box<dyn Error>> {
+    let mut committers = FxHashSet::default();
+    let mut repository = Repository::create(repository_path);
+
+    for commit in repository.commits_lifo() {
+        committers.insert(commit.committer().to_owned());
+        committers.insert(commit.author().to_owned());
+    }
+
+    let mut committers: Vec<_> = committers.into_iter().collect();
+    committers.sort();
+
+    Ok(committers)
 }
