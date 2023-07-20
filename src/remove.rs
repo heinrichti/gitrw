@@ -1,4 +1,11 @@
+use std::{path::PathBuf, sync::mpsc::channel, thread::spawn};
+
 use bstr::ByteSlice;
+use libgitrw::{
+    objs::{Commit, TreeHash},
+    Repository,
+};
+use rustc_hash::FxHashMap;
 
 fn or<'a, T1, F1, F2>(f: F1, g: F2) -> Box<dyn Fn(T1, T1) -> bool + 'a>
 where
@@ -144,9 +151,54 @@ fn build_file_delete_patterns<'a>(
     delete_file
 }
 
-pub fn remove(files: Vec<String>, directories: Vec<String>) {
+fn update_tree<'a>(
+    _tree_hash: &TreeHash,
+    should_delete_file: &(dyn Fn(&'a [u8], &'a [u8]) -> bool),
+    should_delete_folder: &(dyn Fn(&'a [u8]) -> bool),
+) -> Option<TreeHash> {
+    if should_delete_file(b"", b"") {}
+    if should_delete_folder(b"") {}
+    todo!()
+}
+
+pub fn remove(
+    repository_path: PathBuf,
+    files: Vec<String>,
+    directories: Vec<String>,
+    dry_run: bool,
+) {
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
+    let mut rewritten_commits = FxHashMap::default();
+
+    let (tx, rx) = channel();
+    let write_path = repository_path.clone();
+
+    let write_thread =
+        spawn(move || Repository::write_commits(write_path, rx.into_iter(), dry_run));
+
+    let mut repository = Repository::create(repository_path);
+    // todo update parents
+    for mut commit in repository.commits_topo() {
+        if let Some(new_tree_hash) = update_tree(
+            &commit.tree(),
+            &file_delete_patterns,
+            &folder_delete_patterns,
+        ) {
+            let old_hash = commit.hash().clone();
+            commit.set_tree(new_tree_hash);
+            let commit = Commit::create(None, commit.to_bytes(), false);
+            rewritten_commits.insert(old_hash, commit.hash().clone());
+            tx.send(commit).unwrap();
+        }
+    }
+
+    std::mem::drop(tx);
+    write_thread.join().unwrap();
+
+    if !dry_run {
+        repository.update_refs(&rewritten_commits);
+    }
 }
 
 #[cfg(test)]

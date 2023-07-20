@@ -82,7 +82,12 @@ fn main() {
             }
         },
         Commands::Remove { file, directory } => {
-            remove::remove(file.unwrap_or_default(), directory.unwrap_or_default());
+            remove::remove(
+                repository_path,
+                file.unwrap_or_default(),
+                directory.unwrap_or_default(),
+                cli.dry_run,
+            );
         }
 
         Commands::PruneEmpty => {
