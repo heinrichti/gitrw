@@ -9,10 +9,26 @@ where
     Box::new(move |path, filename| f(path, filename) || g(path, filename))
 }
 
+fn or_folder<'a, T1, F1, F2>(f: F1, g: F2) -> Box<dyn Fn(T1) -> bool + 'a>
+where
+    T1: Copy,
+    F1: Fn(T1) -> bool + 'a,
+    F2: Fn(T1) -> bool + 'a,
+{
+    Box::new(move |path| f(path) || g(path))
+}
+
 fn single<'a, T1, F1>(f: F1) -> Box<dyn Fn(T1, T1) -> bool + 'a>
 where
     T1: Copy,
     F1: Fn(T1, T1) -> bool + 'a,
+{
+    Box::new(f)
+}
+
+fn single_folder<'a, T1, F1>(f: F1) -> Box<dyn Fn(T1) -> bool + 'a>
+where
+    F1: Fn(T1) -> bool + 'a,
 {
     Box::new(f)
 }
@@ -24,6 +40,50 @@ fn last_index_of(path: &[u8], needle: u8) -> Option<usize> {
         }
     }
     None
+}
+
+fn build_folder_delete_patterns<'a>(folders: &'a [String]) -> Box<dyn Fn(&'a [u8]) -> bool + 'a> {
+    let mut delete_folder = single_folder(|_path: &[u8]| false);
+
+    for folder in folders.iter().map(|f| f.as_bytes()) {
+        if folder[0] == b'*' {
+            if folder[folder.len() - 1] == b'/' {
+                delete_folder = or_folder(delete_folder, |path| path.ends_with(&folder[1..]));
+            } else {
+                // handles trailing slash
+                delete_folder = or_folder(delete_folder, |path| {
+                    path[0..path.len() - 1].ends_with(&folder[1..])
+                });
+            }
+        } else if folder[folder.len() - 1] == b'*' {
+            delete_folder = or_folder(delete_folder, |path| {
+                path.starts_with(&folder[0..folder.len() - 1])
+            })
+        } else if folder[0] == b'/' {
+            // absolute path, no wildcard
+            if folder[folder.len() - 1] == b'/' {
+                delete_folder = or_folder(delete_folder, |path| path.eq(folder));
+            } else {
+                // handles missing trailing slash
+                delete_folder = or_folder(delete_folder, |path| {
+                    path.len() == folder.len() + 1 && path[0..path.len() - 1].eq(folder)
+                });
+            }
+        } else {
+            // relative path, no wildcard
+            let mut folder: Vec<u8> = folder.to_owned();
+            if folder[folder.len() - 1] != b'/' {
+                folder.push(b'/');
+            }
+            if folder[0] != b'/' {
+                folder.insert(0, b'/');
+            }
+
+            delete_folder = or_folder(delete_folder, move |path| path.ends_with(&folder));
+        }
+    }
+
+    delete_folder
 }
 
 fn build_file_delete_patterns<'a>(
@@ -84,13 +144,48 @@ fn build_file_delete_patterns<'a>(
     delete_file
 }
 
-pub fn remove(files: Vec<String>, _directories: Vec<String>) {
-    let should_delete = build_file_delete_patterns(&files);
-    should_delete(b"/", b"hello world");
+pub fn remove(files: Vec<String>, directories: Vec<String>) {
+    let file_delete_patterns = build_file_delete_patterns(&files);
+    let folder_delete_patterns = build_folder_delete_patterns(&directories);
 }
 
 #[cfg(test)]
 mod test {
+    use super::build_folder_delete_patterns;
+
+    #[test]
+    pub fn folder_deletion_patterns() {
+        let patterns: Vec<String> = vec![
+            "/some/folder".into(),
+            "/another/folder/".into(),
+            "*some_folder".into(),
+            "*my/directory".into(),
+            "/x/y*".into(),
+            "bin/debug".into(),
+            "foo/bar/".into(),
+        ];
+
+        let matches = build_folder_delete_patterns(&patterns);
+
+        assert!(matches(b"/some/folder/"));
+        assert!(matches(b"/another/folder/"));
+        assert!(matches(b"/this/is_some_folder/"));
+        assert!(matches(b"/this/is/some_folder/"));
+        assert!(matches(b"/my/directory/"));
+        assert!(matches(b"/_my/directory/"));
+        assert!(matches(b"/x/y/"));
+        assert!(matches(b"/x/y/z/"));
+        assert!(matches(b"/src/bin/debug/"));
+        assert!(matches(b"/bin/debug/"));
+        assert!(matches(b"/baz/foo/bar/"));
+        assert!(matches(b"/foo/bar/"));
+
+        assert!(!matches(b"/_bin/debug/"));
+        assert!(!matches(b"/bin/debug_/"));
+        assert!(!matches(b"/a/some/folder/"));
+        assert!(!matches(b"/this/is_some_folder/b/"));
+        assert!(!matches(b"/my/directory/b/"));
+    }
 
     #[test]
     pub fn file_deletion_patterns() {
