@@ -8,6 +8,7 @@ use std::io::Write;
 
 mod contributors;
 mod prune;
+mod remove;
 
 #[cfg(not(test))]
 #[global_allocator]
@@ -81,19 +82,7 @@ fn main() {
             }
         },
         Commands::Remove { file, directory } => {
-            if let Some(dir) = directory {
-                for d in dir {
-                    println!("Deleting directory: {d}");
-                }
-            }
-
-            if let Some(file) = file {
-                for f in file {
-                    println!("Deleting file: {f}");
-                }
-            }
-
-            todo!();
+            remove::remove(file.unwrap_or_default(), directory.unwrap_or_default());
         }
 
         Commands::PruneEmpty => {
