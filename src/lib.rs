@@ -130,8 +130,8 @@ impl Repository {
         CommitsFifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
-    pub fn commits_lifo(&mut self) -> CommitsLifoIter {
-        CommitsLifoIter::create(&self.path, &self.pack_reader, &mut self.decompression)
+    pub fn commits_lifo(&self) -> CommitsLifoIter {
+        CommitsLifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
     pub fn refs(&self) -> Result<Vec<GitRef>, Box<dyn Error>> {

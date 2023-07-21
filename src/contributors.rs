@@ -89,7 +89,7 @@ pub fn rewrite(
 
 pub fn get_contributors(repository_path: PathBuf) -> Result<Vec<BString>, Box<dyn Error>> {
     let mut committers = FxHashSet::default();
-    let mut repository = Repository::create(repository_path);
+    let repository = Repository::create(repository_path);
 
     for commit in repository.commits_lifo() {
         committers.insert(commit.committer().to_owned());

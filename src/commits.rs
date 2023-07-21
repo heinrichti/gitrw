@@ -29,7 +29,7 @@ impl<'a> CommitsFifoIter<'a> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
-        mut compression: Decompression,
+        mut decompression: Decompression,
     ) -> Self {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
@@ -37,7 +37,7 @@ impl<'a> CommitsFifoIter<'a> {
 
         let refs = GitRef::read_all(repository_path).unwrap();
         for r in refs {
-            let commit = read_commit_from_ref(&mut compression, repository_path, pack_reader, r);
+            let commit = read_commit_from_ref(&mut decompression, repository_path, pack_reader, r);
             if let Some(x) = commit {
                 commits.push(x);
             };
@@ -53,7 +53,7 @@ impl<'a> CommitsFifoIter<'a> {
 
         CommitsFifoIter {
             pack_reader,
-            compression,
+            compression: decompression,
             repository_path,
             commits,
             processed_commits,
@@ -102,7 +102,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
 
 pub struct CommitsLifoIter<'a> {
     pack_reader: &'a PackReader,
-    compression: &'a mut Decompression,
+    decompression: Decompression,
     repository_path: &'a Path,
     commits: Vec<Commit>,
     processed_commits: FxHashSet<CommitHash>,
@@ -112,14 +112,14 @@ impl<'a> CommitsLifoIter<'a> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
-        compression: &'a mut Decompression,
+        mut decompression: Decompression,
     ) -> CommitsLifoIter<'a> {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
 
         let refs = GitRef::read_all(repository_path).unwrap();
         for r in refs {
-            let commit = read_commit_from_ref(compression, repository_path, pack_reader, r);
+            let commit = read_commit_from_ref(&mut decompression, repository_path, pack_reader, r);
             if let Some(x) = commit {
                 commits.push(x)
             };
@@ -138,7 +138,7 @@ impl<'a> CommitsLifoIter<'a> {
             repository_path,
             commits,
             processed_commits,
-            compression,
+            decompression,
         }
     }
 }
@@ -152,7 +152,7 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
                 for parent in commit.parents() {
                     if !self.processed_commits.contains(&parent) {
                         if let Some(parent_commit) = read_object_from_hash(
-                            self.compression,
+                            &mut self.decompression,
                             self.repository_path,
                             self.pack_reader,
                             parent.0,
