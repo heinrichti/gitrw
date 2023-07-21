@@ -126,11 +126,11 @@ impl Repository {
             });
     }
 
-    pub fn commits_topo(&self) -> CommitsFifoIter {
+    pub fn commits_topo(&self) -> impl Iterator<Item = Commit> + '_ {
         CommitsFifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
-    pub fn commits_lifo(&self) -> CommitsLifoIter {
+    pub fn commits_lifo(&self) -> impl Iterator<Item = Commit> + '_ {
         CommitsLifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 

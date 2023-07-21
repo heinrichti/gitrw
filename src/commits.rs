@@ -16,7 +16,7 @@ use super::{
     refs::GitRef,
 };
 
-pub struct CommitsFifoIter<'a> {
+pub(crate) struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: Decompression,
     repository_path: &'a Path,
@@ -100,7 +100,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
     }
 }
 
-pub struct CommitsLifoIter<'a> {
+pub(crate) struct CommitsLifoIter<'a> {
     pack_reader: &'a PackReader,
     decompression: Decompression,
     repository_path: &'a Path,
