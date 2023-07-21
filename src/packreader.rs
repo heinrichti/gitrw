@@ -24,10 +24,25 @@ struct Pack {
 struct PackWithObjects {
     pack: Mmap,
     objects: FxHashMap<ObjectHash, usize>,
+    pack_file: String,
 }
 
+#[derive(Clone)]
 pub struct PackReader {
     packs: Vec<PackWithObjects>,
+}
+
+impl Clone for PackWithObjects {
+    fn clone(&self) -> Self {
+        let pack_file = File::open(self.pack_file.clone()).unwrap();
+        let pack_map = unsafe { Mmap::map(&pack_file).unwrap() };
+
+        Self {
+            pack: pack_map,
+            objects: self.objects.clone(),
+            pack_file: self.pack_file.clone(),
+        }
+    }
 }
 
 impl PackReader {
@@ -35,7 +50,7 @@ impl PackReader {
         let mut packs_with_objects = Vec::new();
 
         for pack in get_packs(repository_path).into_iter() {
-            let pack_file = File::open(pack.pack_file)?;
+            let pack_file = File::open(pack.pack_file.clone())?;
             let pack_map = unsafe { Mmap::map(&pack_file)? };
 
             let pack_offsets = get_pack_offsets(Path::new(&pack.idx_file)).unwrap();
@@ -51,6 +66,7 @@ impl PackReader {
             packs_with_objects.push(PackWithObjects {
                 pack: pack_map,
                 objects: offsets,
+                pack_file: pack.pack_file,
             });
         }
 

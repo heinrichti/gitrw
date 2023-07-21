@@ -2,7 +2,7 @@ use std::{path::PathBuf, sync::mpsc::channel, thread::spawn};
 
 use bstr::ByteSlice;
 use libgitrw::{
-    objs::{Commit, TreeHash},
+    objs::{Commit, Tree, TreeHash},
     Repository,
 };
 use rustc_hash::FxHashMap;
@@ -120,13 +120,51 @@ fn build_file_delete_patterns(files: &[String]) -> DynFn2 {
 }
 
 fn update_tree(
-    _tree_hash: &TreeHash,
+    tree_hash: TreeHash,
+    path: &[u8],
+    repository: &mut Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
-    todo!()
+
+    let tree: Tree = match repository.read_object(tree_hash.into()).unwrap() {
+        libgitrw::objs::GitObject::Tree(tree) => tree,
+        _ => panic!("Expected a tree, found something else"),
+    };
+
+    println!("tree {} ({})", tree.hash(), path.as_bstr());
+    for line in tree.lines() {
+        println!("{}", line);
+    }
+
+    let old_hash = tree.hash();
+    let tree: Tree = tree
+        .lines()
+        .filter(|line| !should_delete_file(path, line.filename()))
+        .map(|line| {
+            if line.is_tree() {
+                update_tree(
+                    line.hash.clone(),
+                    &[path, line.filename(), b"/"].concat(),
+                    repository,
+                    should_delete_file,
+                    should_delete_folder,
+                );
+
+                // TODO use potential new hash
+            }
+
+            line
+        })
+        .collect();
+
+    if old_hash == tree.hash() {
+        None
+    } else {
+        Some(tree.hash().clone())
+    }
 }
 
 pub fn remove(
@@ -147,9 +185,11 @@ pub fn remove(
 
     let mut repository = Repository::create(repository_path);
     // todo update parents
-    for mut commit in repository.commits_topo() {
+    for mut commit in repository.clone().commits_topo() {
         if let Some(new_tree_hash) = update_tree(
-            &commit.tree(),
+            commit.tree(),
+            b"/",
+            &mut repository,
             &file_delete_patterns,
             &folder_delete_patterns,
         ) {

@@ -33,6 +33,16 @@ pub struct Repository {
     decompression: Decompression,
 }
 
+impl Clone for Repository {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            pack_reader: self.pack_reader.clone(),
+            decompression: Decompression::default(),
+        }
+    }
+}
+
 pub struct WriteObject {
     hash: ObjectHash,
     prefix: String,
@@ -116,8 +126,8 @@ impl Repository {
             });
     }
 
-    pub fn commits_topo(&mut self) -> CommitsFifoIter {
-        CommitsFifoIter::create(&self.path, &self.pack_reader, &mut self.decompression)
+    pub fn commits_topo(&self) -> CommitsFifoIter {
+        CommitsFifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
     pub fn commits_lifo(&mut self) -> CommitsLifoIter {

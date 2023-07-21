@@ -1,6 +1,6 @@
 use crate::shared::{ObjectHash, RefSlice};
 
-use self::tree::TreeLine;
+use self::tree::TreeLineIndex;
 
 mod commit;
 mod tag;
@@ -8,6 +8,12 @@ mod tree;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct TreeHash(pub(crate) ObjectHash);
+
+impl From<TreeHash> for ObjectHash {
+    fn from(val: TreeHash) -> Self {
+        val.0
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct CommitHash(pub(crate) ObjectHash);
@@ -55,7 +61,7 @@ pub enum TagTargetType {
 #[derive(Debug)]
 pub struct Tree {
     _object_hash: TreeHash,
-    lines: Vec<TreeLine>,
+    lines: Vec<TreeLineIndex>,
     _bytes: Box<[u8]>,
 }
 

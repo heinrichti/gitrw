@@ -18,7 +18,7 @@ use super::{
 
 pub struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
-    compression: &'a mut Decompression,
+    compression: Decompression,
     repository_path: &'a Path,
     commits: Vec<Commit>,
     processed_commits: FxHashSet<CommitHash>,
@@ -29,7 +29,7 @@ impl<'a> CommitsFifoIter<'a> {
     pub fn create(
         repository_path: &'a Path,
         pack_reader: &'a PackReader,
-        compression: &'a mut Decompression,
+        mut compression: Decompression,
     ) -> Self {
         let mut commits = Vec::new();
         let processed_commits = FxHashSet::default();
@@ -37,7 +37,7 @@ impl<'a> CommitsFifoIter<'a> {
 
         let refs = GitRef::read_all(repository_path).unwrap();
         for r in refs {
-            let commit = read_commit_from_ref(compression, repository_path, pack_reader, r);
+            let commit = read_commit_from_ref(&mut compression, repository_path, pack_reader, r);
             if let Some(x) = commit {
                 commits.push(x);
             };
@@ -80,7 +80,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
                 for parent in parents {
                     if !self.processed_commits.contains(&parent) {
                         let parent_commit = read_object_from_hash(
-                            self.compression,
+                            &mut self.compression,
                             self.repository_path,
                             self.pack_reader,
                             parent.0,

@@ -2,7 +2,7 @@ pub(crate) mod object_hash;
 
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub struct ObjectHash {
-    bytes: [u8; 20],
+    pub(crate) bytes: [u8; 20],
 }
 
 #[derive(Debug)]
