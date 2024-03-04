@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{borrow::Cow, fmt::Display};
 
 use bstr::{BStr, ByteSlice, ByteVec};
 
@@ -8,11 +8,13 @@ use super::{ObjectHash, Tree, TreeHash};
 
 impl Tree {
     pub fn create(object_hash: TreeHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree {
-        let mut position = 0;
+        let start_index = if skip_first_null {
+            bytes.iter().position(|x| *x == b'\0').unwrap() + 1
+        } else { 
+            0 
+        };
 
-        if skip_first_null {
-            position = bytes.iter().position(|x| *x == b'\0').unwrap() + 1;
-        }
+        let mut position = start_index;
 
         let mut null_terminator_index_opt = bytes[position..].iter().position(|x| *x == b'\0');
         let mut lines = Vec::new();
@@ -38,15 +40,38 @@ impl Tree {
         Tree {
             _object_hash: object_hash,
             lines,
-            _bytes: bytes,
+            bytes,
+            bytes_start: start_index,
         }
     }
 
     pub fn lines(&self) -> impl Iterator<Item = TreeLine> {
         self.lines.iter().map(|tree_line_index| TreeLine {
-            hash: &tree_line_index.hash,
-            text: tree_line_index.text.get(&self._bytes).as_bstr(), // text: self._bytes.get(tree_line_index.text),
+            hash: Cow::Borrowed(&tree_line_index.hash),
+            text: tree_line_index.text.get(&self.bytes).as_bstr(), // text: self._bytes.get(tree_line_index.text),
         })
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes[self.bytes_start..]
+    }
+
+    pub fn to_bytes(&self) -> Box<[u8]> {
+        let size = self.lines.iter()
+            .fold(0, |acc, line| acc + line.text.get(&self.bytes).len() + 22);
+        let mut result: Vec<u8> = Vec::with_capacity(size);
+
+        // every line is text + \0 + hash in bytes
+        for line in self.lines.iter() {
+            result.push_str(line.text.get(&self.bytes));
+            result.push(b'\0');
+            for c in line.hash.0.bytes {
+                result.push(c);
+            }
+            result.push(b'\n');
+        }
+
+        result.into_boxed_slice()
     }
 }
 
@@ -68,7 +93,7 @@ impl<'a> FromIterator<TreeLine<'a>> for Tree {
 }
 
 pub struct TreeLine<'a> {
-    pub hash: &'a TreeHash,
+    pub hash: Cow<'a, TreeHash>,
     pub text: &'a BStr,
 }
 
@@ -142,7 +167,7 @@ impl From<ObjectHash> for TreeHash {
 impl Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.lines.iter() {
-            let text = line.text.get(&self._bytes).as_bstr();
+            let text = line.text.get(&self.bytes).as_bstr();
             writeln!(f, "{} {}", line.hash, text)?;
         }
         Ok(())

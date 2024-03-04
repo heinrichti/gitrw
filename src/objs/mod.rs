@@ -62,7 +62,8 @@ pub enum TagTargetType {
 pub struct Tree {
     _object_hash: TreeHash,
     lines: Vec<TreeLineIndex>,
-    _bytes: Box<[u8]>,
+    bytes: Box<[u8]>,
+    bytes_start: usize,
 }
 
 impl Tree {

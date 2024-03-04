@@ -9,7 +9,7 @@ use std::{
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
-use objs::{Commit, CommitHash, GitObject, Tag};
+use objs::{Commit, CommitHash, GitObject, Tag, Tree};
 use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
@@ -69,6 +69,16 @@ impl From<Tag> for WriteObject {
     }
 }
 
+impl From<Tree> for WriteObject {
+    fn from(value: Tree) -> Self {
+        Self {
+            hash: value.hash().0.clone(),
+            prefix: String::from("tree"),
+            bytes: value.bytes().to_owned(),
+        }
+    }
+}
+
 pub fn calculate_hash(data: &[u8], prefix: &[u8]) -> ObjectHash {
     let mut hasher = Sha1Hasher::default();
     hasher.write(prefix);
@@ -123,6 +133,19 @@ impl Repository {
             .filter(|_| !dry_run)
             .for_each(|commit| {
                 Self::write(repository_path.clone(), commit.into());
+            });
+    }
+
+    pub fn write_trees(
+        repository_path: PathBuf,
+        trees: impl Iterator<Item = objs::Tree> + Send,
+        dry_run: bool,
+    ) {
+        trees
+            .par_bridge()
+            .filter(|_| !dry_run)
+            .for_each(|tree| {
+                Self::write(repository_path.clone(), tree.into());
             });
     }
 

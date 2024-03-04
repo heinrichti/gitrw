@@ -1,11 +1,11 @@
-use std::{path::PathBuf, sync::mpsc::channel, thread::spawn};
+use std::{borrow::Cow, collections::HashMap, hash::{BuildHasher, BuildHasherDefault}, ops::Deref, path::PathBuf, sync::mpsc::channel, thread::spawn};
 
 use bstr::ByteSlice;
 use libgitrw::{
-    objs::{Commit, Tree, TreeHash},
+    objs::{Commit, CommitHash, Tree, TreeHash},
     Repository,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHasher};
 
 macro_rules! b {
     ( $x:expr ) => {
@@ -125,44 +125,51 @@ fn update_tree(
     repository: &mut Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
+    rewritten_trees: &mut HashMap<TreeHash, TreeHash, BuildHasherDefault<FxHasher>>,
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
+
+    if let Some(rewritten_hash) = rewritten_trees.get(&tree_hash) {
+        if *rewritten_hash == tree_hash {
+            return None;
+        }
+        return Some(rewritten_hash.clone());
+    }
 
     let tree: Tree = match repository.read_object(tree_hash.into()).unwrap() {
         libgitrw::objs::GitObject::Tree(tree) => tree,
         _ => panic!("Expected a tree, found something else"),
     };
 
-    println!("tree {} ({})", tree.hash(), path.as_bstr());
-    for line in tree.lines() {
-        println!("{}", line);
-    }
-
     let old_hash = tree.hash();
     let tree: Tree = tree
         .lines()
         .filter(|line| !should_delete_file(path, line.filename()))
-        .map(|line| {
+        .map(|mut line| {
             if line.is_tree() {
-                update_tree(
-                    line.hash.clone(),
+                if let Some(new_tree_hash) = update_tree(
+                    line.hash.deref().clone(),
                     &[path, line.filename(), b"/"].concat(),
                     repository,
                     should_delete_file,
                     should_delete_folder,
-                );
-
-                // TODO use potential new hash
+                    rewritten_trees
+                ) {            
+                    line.hash = Cow::Owned(new_tree_hash);
+                }
             }
 
             line
         })
         .collect();
 
+    rewritten_trees.insert(old_hash.clone(), tree.hash().clone());
+
     if old_hash == tree.hash() {
         None
     } else {
+        // TODO write out new tree
         Some(tree.hash().clone())
     }
 }
@@ -175,7 +182,8 @@ pub fn remove(
 ) {
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
-    let mut rewritten_commits = FxHashMap::default();
+    let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
+    let mut rewritten_trees: HashMap<TreeHash, TreeHash, _> = FxHashMap::default();
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();
@@ -184,20 +192,29 @@ pub fn remove(
         spawn(move || Repository::write_commits(write_path, rx.into_iter(), dry_run));
 
     let mut repository = Repository::create(repository_path);
-    // todo update parents
     for mut commit in repository.clone().commits_topo() {
+        let old_hash = commit.hash().clone();
+
+        update_parents(&mut commit, &rewritten_commits);
+
+        // update tree
+        // TODO write out new trees!
         if let Some(new_tree_hash) = update_tree(
             commit.tree(),
             b"/",
             &mut repository,
             &file_delete_patterns,
             &folder_delete_patterns,
+            &mut rewritten_trees
         ) {
-            let old_hash = commit.hash().clone();
             commit.set_tree(new_tree_hash);
+        }
+        
+        // write out changes if any
+        if commit.has_changes() {
             let commit = Commit::create(None, commit.to_bytes(), false);
             rewritten_commits.insert(old_hash, commit.hash().clone());
-            tx.send(commit).unwrap();
+            tx.send(commit).unwrap();    
         }
     }
 
@@ -206,6 +223,16 @@ pub fn remove(
 
     if !dry_run {
         repository.update_refs(&rewritten_commits);
+    }
+}
+
+fn update_parents(commit: &mut Commit, rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>) {
+    for (i, parent) in commit.parents().iter().enumerate() {
+        if let Some(new_parent) = rewritten_commits.get(parent) {
+            if new_parent != parent {
+                commit.set_parent(i, new_parent.clone());
+            }
+        }
     }
 }
 
