@@ -126,17 +126,14 @@ fn update_tree(
     repository: &mut Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
-    rewritten_trees: &mut HashMap<TreeHash, TreeHash, BuildHasherDefault<FxHasher>>,
+    rewritten_trees: &mut HashMap<TreeHash, Option<TreeHash>, BuildHasherDefault<FxHasher>>,
     write_tree: &mut impl FnMut(Tree),
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
 
-    if let Some(rewritten_hash) = rewritten_trees.get(&tree_hash) {
-        if *rewritten_hash == tree_hash {
-            return None;
-        }
-        return Some(rewritten_hash.clone());
+    if let Some(rewritten_hash_option) = rewritten_trees.get(&tree_hash) {
+        return rewritten_hash_option.clone();
     }
 
     let tree: Tree = match repository.read_object(tree_hash.into()).unwrap() {
@@ -167,14 +164,16 @@ fn update_tree(
         })
         .collect();
 
-    rewritten_trees.insert(old_hash.clone(), tree.hash().clone());
 
     if old_hash == tree.hash() {
+        rewritten_trees.insert(old_hash.clone(), None);
+
         None
     } else {
-        let hash = tree.hash().clone();
+        let new_hash = tree.hash().clone();
+        rewritten_trees.insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
-        Some(hash)
+        Some(new_hash)
     }
 }
 
@@ -187,7 +186,7 @@ pub fn remove(
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let mut rewritten_trees: HashMap<TreeHash, TreeHash, _> = FxHashMap::default();
+    let mut rewritten_trees: HashMap<TreeHash, Option<TreeHash>, _> = FxHashMap::default();
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();
@@ -214,8 +213,6 @@ pub fn remove(
             &mut |tree| {
                 if !dry_run {
                     // TODO write out on different thread
-                    println!("writing out... {}", tree.hash());
-                    println!("{}", &tree);
                     Repository::write(repo_path_clone.clone(), tree.into());
                 }
             },
@@ -226,7 +223,6 @@ pub fn remove(
         // write out changes if any
         if commit.has_changes() {
             let commit = Commit::create(None, commit.to_bytes(), false);
-            println!("commit: \n{}", commit.to_bytes().as_bstr().to_string());
             rewritten_commits.insert(old_hash, commit.hash().clone());
             tx.send(commit).unwrap();    
         }

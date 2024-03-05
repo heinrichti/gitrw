@@ -38,8 +38,6 @@ pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
     let mut buf_writer = BufWriter::new(file);
     let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
 
-    println!("Writing file {}", path.display());
-
     let mut compress = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     compress.write_all(&preamble).unwrap();
     compress.write_all(data).unwrap();
