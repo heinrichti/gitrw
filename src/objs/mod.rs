@@ -60,7 +60,7 @@ pub enum TagTargetType {
 
 #[derive(Debug)]
 pub struct Tree {
-    _object_hash: TreeHash,
+    object_hash: TreeHash,
     lines: Vec<TreeLineIndex>,
     bytes: Box<[u8]>,
     bytes_start: usize,
@@ -68,6 +68,6 @@ pub struct Tree {
 
 impl Tree {
     pub fn hash(&self) -> &TreeHash {
-        &self._object_hash
+        &self.object_hash
     }
 }

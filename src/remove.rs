@@ -1,4 +1,5 @@
-use std::{borrow::Cow, collections::HashMap, hash::{BuildHasher, BuildHasherDefault}, ops::Deref, path::PathBuf, sync::mpsc::channel, thread::spawn};
+use core::panic;
+use std::{borrow::Cow, collections::HashMap, hash::BuildHasherDefault, ops::Deref, path::PathBuf, sync::mpsc::channel, thread::spawn};
 
 use bstr::ByteSlice;
 use libgitrw::{
@@ -126,6 +127,7 @@ fn update_tree(
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
     rewritten_trees: &mut HashMap<TreeHash, TreeHash, BuildHasherDefault<FxHasher>>,
+    write_tree: &mut impl FnMut(Tree),
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
@@ -154,8 +156,9 @@ fn update_tree(
                     repository,
                     should_delete_file,
                     should_delete_folder,
-                    rewritten_trees
-                ) {            
+                    rewritten_trees,
+                    write_tree,
+                ) {
                     line.hash = Cow::Owned(new_tree_hash);
                 }
             }
@@ -169,8 +172,9 @@ fn update_tree(
     if old_hash == tree.hash() {
         None
     } else {
-        // TODO write out new tree
-        Some(tree.hash().clone())
+        let hash = tree.hash().clone();
+        write_tree(tree);
+        Some(hash)
     }
 }
 
@@ -191,6 +195,8 @@ pub fn remove(
     let write_thread =
         spawn(move || Repository::write_commits(write_path, rx.into_iter(), dry_run));
 
+    let repo_path_clone = repository_path.clone();
+
     let mut repository = Repository::create(repository_path);
     for mut commit in repository.clone().commits_topo() {
         let old_hash = commit.hash().clone();
@@ -198,14 +204,21 @@ pub fn remove(
         update_parents(&mut commit, &rewritten_commits);
 
         // update tree
-        // TODO write out new trees!
         if let Some(new_tree_hash) = update_tree(
             commit.tree(),
             b"/",
             &mut repository,
             &file_delete_patterns,
             &folder_delete_patterns,
-            &mut rewritten_trees
+            &mut rewritten_trees,
+            &mut |tree| {
+                if !dry_run {
+                    // TODO write out on different thread
+                    println!("writing out... {}", tree.hash());
+                    println!("{}", &tree);
+                    Repository::write(repo_path_clone.clone(), tree.into());
+                }
+            },
         ) {
             commit.set_tree(new_tree_hash);
         }
@@ -213,6 +226,7 @@ pub fn remove(
         // write out changes if any
         if commit.has_changes() {
             let commit = Commit::create(None, commit.to_bytes(), false);
+            println!("commit: \n{}", commit.to_bytes().as_bstr().to_string());
             rewritten_commits.insert(old_hash, commit.hash().clone());
             tx.send(commit).unwrap();    
         }

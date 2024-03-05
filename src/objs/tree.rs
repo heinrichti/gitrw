@@ -38,7 +38,7 @@ impl Tree {
         }
 
         Tree {
-            _object_hash: object_hash,
+            object_hash,
             lines,
             bytes,
             bytes_start: start_index,
@@ -54,24 +54,6 @@ impl Tree {
 
     pub fn bytes(&self) -> &[u8] {
         &self.bytes[self.bytes_start..]
-    }
-
-    pub fn to_bytes(&self) -> Box<[u8]> {
-        let size = self.lines.iter()
-            .fold(0, |acc, line| acc + line.text.get(&self.bytes).len() + 22);
-        let mut result: Vec<u8> = Vec::with_capacity(size);
-
-        // every line is text + \0 + hash in bytes
-        for line in self.lines.iter() {
-            result.push_str(line.text.get(&self.bytes));
-            result.push(b'\0');
-            for c in line.hash.0.bytes {
-                result.push(c);
-            }
-            result.push(b'\n');
-        }
-
-        result.into_boxed_slice()
     }
 }
 

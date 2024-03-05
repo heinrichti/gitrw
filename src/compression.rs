@@ -38,30 +38,16 @@ pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
     let mut buf_writer = BufWriter::new(file);
     let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
 
-    let mut compress = flate2::Compress::new(flate2::Compression::default(), true);
+    println!("Writing file {}", path.display());
 
-    let mut output_buf: Vec<u8> = Vec::with_capacity(data.len() + preamble.len());
-    let status = compress
-        .compress_vec(&preamble, &mut output_buf, flate2::FlushCompress::None)
-        .unwrap();
-
-    if status != Status::Ok {
-        panic!("Something went wrong compressing the preamble");
-    }
-
-    let status = compress
-        .compress_vec(data, &mut output_buf, flate2::FlushCompress::Finish)
-        .unwrap();
+    let mut compress = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    compress.write_all(&preamble).unwrap();
+    compress.write_all(data).unwrap();
+    let data = compress.finish().unwrap();
 
     buf_writer
-        .write_all(&output_buf[0..compress.total_out().try_into().unwrap()])
+        .write_all(&data)
         .unwrap();
-
-    if status == Status::BufError {
-        panic!("Status is BufError");
-    } else if status == Status::Ok {
-        panic!("Status is Ok");
-    }
 }
 
 impl Decompression {
