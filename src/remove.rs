@@ -1,13 +1,11 @@
 use core::panic;
-use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
+use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::mpsc::channel};
 
 use bstr::ByteSlice;
 use libgitrw::{
     objs::{Commit, CommitHash, Tree, TreeHash},
     Repository,
 };
-use rayon::prelude::*;
-use itertools::Itertools;
 use rustc_hash::FxHashMap;
 
 macro_rules! b {
@@ -128,13 +126,13 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     repository: &Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
-    rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, T>>>,
+    rewritten_trees: &mut HashMap<TreeHash, Option<TreeHash>, T>,
     write_tree: &(impl Fn(Tree) + Sync + Send),
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
 
-    if let Some(rewritten_hash_option) = rewritten_trees.read().unwrap().get(&tree_hash) {
+    if let Some(rewritten_hash_option) = rewritten_trees.get(&tree_hash) {
         return rewritten_hash_option.clone();
     }
 
@@ -147,40 +145,32 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     let lines: Vec<_> = tree.lines().collect();
     let tree: Tree = lines
         .into_iter()
-        .enumerate()
-        .par_bridge()
         .map(|mut line| {
-            if line.1.is_tree() {
+            if line.is_tree() {
                 if let Some(new_tree_hash) = update_tree(
-                    line.1.hash.deref().clone(),
-                    &[path, line.1.filename(), b"/"].concat(),
+                    line.hash.deref().clone(),
+                    &[path, line.filename(), b"/"].concat(),
                     repository,
                     should_delete_file,
                     should_delete_folder,
-                    rewritten_trees.clone(),
+                    rewritten_trees,
                     write_tree,
                 ) {
-                    line.1.hash = Cow::Owned(new_tree_hash);
+                    line.hash = Cow::Owned(new_tree_hash);
                 }
             }
 
             line
         })
-        .collect_vec_list()
-        .into_iter()
-        .flatten()
-        .sorted_by(|a, b| a.0.cmp(&b.0))
-        .into_iter()
-        .map(|a| a.1)
         .collect();
 
 
     if old_hash == tree.hash() {
-        rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
+        rewritten_trees.insert(old_hash.clone(), None);
         None
     } else {
         let new_hash = tree.hash().clone();
-        rewritten_trees.write().unwrap().insert(old_hash.clone(), Some(new_hash.clone()));
+        rewritten_trees.insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
         Some(new_hash)
     }
@@ -195,7 +185,7 @@ pub fn remove(
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
+    let mut rewritten_trees: HashMap<TreeHash, Option<TreeHash>, _> = FxHashMap::default();
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();
@@ -218,7 +208,7 @@ pub fn remove(
                 &mut repository,
                 &file_delete_patterns,
                 &folder_delete_patterns,
-                rewritten_trees.clone(),
+                &mut rewritten_trees,
                 &mut |tree| {
                     if !dry_run {
                         // TODO write out on different thread
