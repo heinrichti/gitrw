@@ -1,5 +1,5 @@
 use core::panic;
-use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::mpsc::channel};
+use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
 
 use bstr::ByteSlice;
 use libgitrw::{
@@ -7,6 +7,7 @@ use libgitrw::{
     Repository,
 };
 use rustc_hash::FxHashMap;
+use rayon::prelude::*;
 
 macro_rules! b {
     ( $x:expr ) => {
@@ -126,13 +127,10 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     repository: &Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
-    rewritten_trees: &mut HashMap<TreeHash, Option<TreeHash>, T>,
+    rewritten_trees: &Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, T>>>,
     write_tree: &(impl Fn(Tree) + Sync + Send),
 ) -> Option<TreeHash> {
-    if should_delete_file(b"", b"") {}
-    if should_delete_folder(b"") {}
-
-    if let Some(rewritten_hash_option) = rewritten_trees.get(&tree_hash) {
+    if let Some(rewritten_hash_option) = rewritten_trees.read().unwrap().get(&tree_hash) {
         return rewritten_hash_option.clone();
     }
 
@@ -166,11 +164,11 @@ fn update_tree<T: BuildHasher + Sync + Send>(
 
 
     if old_hash == tree.hash() {
-        rewritten_trees.insert(old_hash.clone(), None);
+        rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
         None
     } else {
         let new_hash = tree.hash().clone();
-        rewritten_trees.insert(old_hash.clone(), Some(new_hash.clone()));
+        rewritten_trees.write().unwrap().insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
         Some(new_hash)
     }
@@ -185,38 +183,46 @@ pub fn remove(
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let mut rewritten_trees: HashMap<TreeHash, Option<TreeHash>, _> = FxHashMap::default();
+    let  rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();
 
+    // first pass to get the rewritten trees
+    let repository = Repository::create(repository_path.clone());
+    repository.commits_topo().par_bridge().for_each(|commit| {
+        let old_tree_hash = commit.tree();
+        update_tree(
+            old_tree_hash,
+            b"/",
+            &repository,
+            &file_delete_patterns,
+            &folder_delete_patterns,
+            &rewritten_trees,
+            &|tree| {
+                if !dry_run {
+                    // TODO write out on different thread
+                    Repository::write(repository_path.clone(), tree.into());
+                }
+            },
+        );
+    });
+
+    // second pass to actually rewrite the commits
     rayon::scope(move |scope| {
         scope.spawn(move |_| Repository::write_commits(write_path, rx.into_iter(), dry_run));
-
-        let repo_path_clone = repository_path.clone();
 
         let mut repository = Repository::create(repository_path);
         for mut commit in repository.clone().commits_topo() {
             let old_hash = commit.hash().clone();
 
             update_parents(&mut commit, &rewritten_commits);
-
             // update tree
-            if let Some(new_tree_hash) = update_tree(
-                commit.tree(),
-                b"/",
-                &mut repository,
-                &file_delete_patterns,
-                &folder_delete_patterns,
-                &mut rewritten_trees,
-                &mut |tree| {
-                    if !dry_run {
-                        // TODO write out on different thread
-                        Repository::write(repo_path_clone.clone(), tree.into());
-                    }
-                },
-            ) {
-                commit.set_tree(new_tree_hash);
+            if let Some(new_tree_hash) = rewritten_trees.read().unwrap()
+                .get(&commit.tree()) {
+                if let Some(new_tree_hash) = new_tree_hash {
+                    commit.set_tree(new_tree_hash.clone());
+                }
             }
             
             // write out changes if any
