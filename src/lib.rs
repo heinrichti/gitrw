@@ -159,7 +159,7 @@ impl Repository {
     }
 
     pub fn update_refs<T: BuildHasher>(
-        &mut self,
+        &self,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
     ) {
         refs::GitRef::update(self, rewritten_commits);

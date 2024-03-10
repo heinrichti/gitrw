@@ -1,5 +1,5 @@
 use core::panic;
-use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
+use std::{borrow::Cow, cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
 
 use bstr::ByteSlice;
 use libgitrw::{
@@ -174,71 +174,127 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     }
 }
 
+struct OrderedCommit {
+    commit: Commit,
+    index: usize,
+}
+
+impl Eq for OrderedCommit{
+}
+
+impl PartialEq for OrderedCommit {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
+}
+
+impl PartialOrd for OrderedCommit {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.index.cmp(&other.index))
+    }
+}
+
+impl Ord for OrderedCommit {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.index.cmp(&other.index)
+    } 
+}
+
 pub fn remove(
     repository_path: PathBuf,
     files: Vec<String>,
     directories: Vec<String>,
     dry_run: bool,
 ) {
-    let file_delete_patterns = build_file_delete_patterns(&files);
-    let folder_delete_patterns = build_folder_delete_patterns(&directories);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let  rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
+    let rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
 
-    let (tx, rx) = channel();
-    let write_path = repository_path.clone();
-
-    // first pass to get the rewritten trees
     let repository = Repository::create(repository_path.clone());
-    repository.commits_topo().par_bridge().for_each(|commit| {
-        let old_tree_hash = commit.tree();
-        update_tree(
-            old_tree_hash,
-            b"/",
-            &repository,
-            &file_delete_patterns,
-            &folder_delete_patterns,
-            &rewritten_trees,
-            &|tree| {
-                if !dry_run {
-                    // TODO write out on different thread
-                    Repository::write(repository_path.clone(), tree.into());
-                }
-            },
-        );
-    });
 
-    // second pass to actually rewrite the commits
-    rayon::scope(move |scope| {
-        scope.spawn(move |_| Repository::write_commits(write_path, rx.into_iter(), dry_run));
+    rayon::scope(|scope| {
+        let (tx, rx) = channel::<OrderedCommit>();
+        scope.spawn(|_| {
+            let mut heap: BinaryHeap<Reverse<OrderedCommit>> = BinaryHeap::new();
+            let mut commit_index = 0usize;
+            for ordered_commit in rx.into_iter() {
+                if ordered_commit.index == commit_index {
+                    commit_index += 1;
 
-        let mut repository = Repository::create(repository_path);
-        for mut commit in repository.clone().commits_topo() {
-            let old_hash = commit.hash().clone();
+                    let (old_hash, new_hash) = update_commit(&repository_path, ordered_commit.commit, &rewritten_commits, &rewritten_trees);
+                    if old_hash != new_hash {
+                        rewritten_commits.insert(old_hash, new_hash);
+                    }
 
-            update_parents(&mut commit, &rewritten_commits);
-            // update tree
-            if let Some(new_tree_hash) = rewritten_trees.read().unwrap()
-                .get(&commit.tree()) {
-                if let Some(new_tree_hash) = new_tree_hash {
-                    commit.set_tree(new_tree_hash.clone());
+                    while let Some(commit) = heap.pop() {
+                        if commit.0.index == commit_index {
+                            commit_index += 1;
+
+                            let (old_hash, new_hash) = update_commit(&repository_path, commit.0.commit, &rewritten_commits, &rewritten_trees);
+                            if old_hash != new_hash {
+                                rewritten_commits.insert(old_hash, new_hash);
+                            }
+                        } else {
+                            heap.push(commit);
+                            break;
+                        }
+                    }
+                } else {
+                    heap.push(Reverse(ordered_commit));
                 }
             }
-            
-            // write out changes if any
-            if commit.has_changes() {
-                let commit = Commit::create(None, commit.to_bytes(), false);
-                rewritten_commits.insert(old_hash, commit.hash().clone());
-                tx.send(commit).unwrap();    
-            }
-        }
+        });
+
+        let file_delete_patterns = build_file_delete_patterns(&files);
+        let folder_delete_patterns = build_folder_delete_patterns(&directories);    
+        repository.commits_topo().enumerate().map(|a| OrderedCommit { index: a.0, commit: a.1}).par_bridge().for_each(|commit| {
+            let old_tree_hash = commit.commit.tree();
+            update_tree(
+                old_tree_hash,
+                b"/",
+                &repository,
+                &file_delete_patterns,
+                &folder_delete_patterns,
+                &rewritten_trees,
+                &|tree| {
+                    if !dry_run {
+                        // TODO write out on different thread
+                        Repository::write(repository_path.clone(), tree.into());
+                    }
+                },
+            );
+    
+            tx.send(commit).unwrap();
+        });
 
         std::mem::drop(tx);
-        
-        if !dry_run {
-            repository.update_refs(&rewritten_commits);
-        }
     });
+
+    if !dry_run {
+        repository.update_refs(&rewritten_commits);
+    }
+}
+
+fn update_commit(
+    repo_path: &PathBuf,
+    mut commit: Commit, 
+    rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>, 
+    rewritten_trees: &RwLock<HashMap<TreeHash, Option<TreeHash>, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>>) -> (CommitHash, CommitHash) {
+    let old_hash = commit.hash().clone();
+
+    update_parents(&mut commit, rewritten_commits);
+    // update tree
+    if let Some(new_tree_hash) = rewritten_trees.read().unwrap()
+        .get(&commit.tree()) {
+        if let Some(new_tree_hash) = new_tree_hash {
+            commit.set_tree(new_tree_hash.clone());
+        }
+    }
+    
+    if commit.has_changes() {
+        Repository::write(repo_path.clone(), Commit::create(None, commit.to_bytes(), false).into());
+    }
+
+    (old_hash, commit.hash().clone())
 }
 
 fn update_parents(commit: &mut Commit, rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>) {
