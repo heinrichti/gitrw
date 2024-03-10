@@ -1,12 +1,14 @@
 use core::panic;
-use std::{borrow::Cow, collections::HashMap, hash::BuildHasherDefault, ops::Deref, path::PathBuf, sync::mpsc::channel, thread::spawn};
+use std::{borrow::Cow, collections::HashMap, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
 
 use bstr::ByteSlice;
 use libgitrw::{
     objs::{Commit, CommitHash, Tree, TreeHash},
     Repository,
 };
-use rustc_hash::{FxHashMap, FxHasher};
+use rayon::prelude::*;
+use itertools::Itertools;
+use rustc_hash::FxHashMap;
 
 macro_rules! b {
     ( $x:expr ) => {
@@ -23,8 +25,8 @@ fn last_index_of(path: &[u8], needle: u8) -> Option<usize> {
     None
 }
 
-type DynFn<'a> = Box<dyn Fn(&'a [u8]) -> bool + 'a>;
-type DynFn2<'a> = Box<dyn Fn(&[u8], &[u8]) -> bool + 'a>;
+type DynFn<'a> = Box<dyn Fn(&'a [u8]) -> bool + 'a + Sync + Send>;
+type DynFn2<'a> = Box<dyn Fn(&[u8], &[u8]) -> bool + 'a + Sync + Send>;
 
 fn build_folder_delete_patterns(folders: &[String]) -> DynFn {
     let mut delete_folder: DynFn = Box::new(|_path| false);
@@ -120,19 +122,19 @@ fn build_file_delete_patterns(files: &[String]) -> DynFn2 {
     delete_file
 }
 
-fn update_tree(
+fn update_tree<T: BuildHasher + Sync + Send>(
     tree_hash: TreeHash,
     path: &[u8],
-    repository: &mut Repository,
+    repository: &Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
-    rewritten_trees: &mut HashMap<TreeHash, Option<TreeHash>, BuildHasherDefault<FxHasher>>,
-    write_tree: &mut impl FnMut(Tree),
+    rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, T>>>,
+    write_tree: &(impl Fn(Tree) + Sync + Send),
 ) -> Option<TreeHash> {
     if should_delete_file(b"", b"") {}
     if should_delete_folder(b"") {}
 
-    if let Some(rewritten_hash_option) = rewritten_trees.get(&tree_hash) {
+    if let Some(rewritten_hash_option) = rewritten_trees.read().unwrap().get(&tree_hash) {
         return rewritten_hash_option.clone();
     }
 
@@ -142,36 +144,43 @@ fn update_tree(
     };
 
     let old_hash = tree.hash();
-    let tree: Tree = tree
-        .lines()
-        .filter(|line| !should_delete_file(path, line.filename()))
+    let lines: Vec<_> = tree.lines().collect();
+    let tree: Tree = lines
+        .into_iter()
+        .enumerate()
+        .par_bridge()
         .map(|mut line| {
-            if line.is_tree() {
+            if line.1.is_tree() {
                 if let Some(new_tree_hash) = update_tree(
-                    line.hash.deref().clone(),
-                    &[path, line.filename(), b"/"].concat(),
+                    line.1.hash.deref().clone(),
+                    &[path, line.1.filename(), b"/"].concat(),
                     repository,
                     should_delete_file,
                     should_delete_folder,
-                    rewritten_trees,
+                    rewritten_trees.clone(),
                     write_tree,
                 ) {
-                    line.hash = Cow::Owned(new_tree_hash);
+                    line.1.hash = Cow::Owned(new_tree_hash);
                 }
             }
 
             line
         })
+        .collect_vec_list()
+        .into_iter()
+        .flatten()
+        .sorted_by(|a, b| a.0.cmp(&b.0))
+        .into_iter()
+        .map(|a| a.1)
         .collect();
 
 
     if old_hash == tree.hash() {
-        rewritten_trees.insert(old_hash.clone(), None);
-
+        rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
         None
     } else {
         let new_hash = tree.hash().clone();
-        rewritten_trees.insert(old_hash.clone(), Some(new_hash.clone()));
+        rewritten_trees.write().unwrap().insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
         Some(new_hash)
     }
@@ -186,54 +195,54 @@ pub fn remove(
     let file_delete_patterns = build_file_delete_patterns(&files);
     let folder_delete_patterns = build_folder_delete_patterns(&directories);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let mut rewritten_trees: HashMap<TreeHash, Option<TreeHash>, _> = FxHashMap::default();
+    let rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();
 
-    let write_thread =
-        spawn(move || Repository::write_commits(write_path, rx.into_iter(), dry_run));
+    rayon::scope(move |scope| {
+        scope.spawn(move |_| Repository::write_commits(write_path, rx.into_iter(), dry_run));
 
-    let repo_path_clone = repository_path.clone();
+        let repo_path_clone = repository_path.clone();
 
-    let mut repository = Repository::create(repository_path);
-    for mut commit in repository.clone().commits_topo() {
-        let old_hash = commit.hash().clone();
+        let mut repository = Repository::create(repository_path);
+        for mut commit in repository.clone().commits_topo() {
+            let old_hash = commit.hash().clone();
 
-        update_parents(&mut commit, &rewritten_commits);
+            update_parents(&mut commit, &rewritten_commits);
 
-        // update tree
-        if let Some(new_tree_hash) = update_tree(
-            commit.tree(),
-            b"/",
-            &mut repository,
-            &file_delete_patterns,
-            &folder_delete_patterns,
-            &mut rewritten_trees,
-            &mut |tree| {
-                if !dry_run {
-                    // TODO write out on different thread
-                    Repository::write(repo_path_clone.clone(), tree.into());
-                }
-            },
-        ) {
-            commit.set_tree(new_tree_hash);
+            // update tree
+            if let Some(new_tree_hash) = update_tree(
+                commit.tree(),
+                b"/",
+                &mut repository,
+                &file_delete_patterns,
+                &folder_delete_patterns,
+                rewritten_trees.clone(),
+                &mut |tree| {
+                    if !dry_run {
+                        // TODO write out on different thread
+                        Repository::write(repo_path_clone.clone(), tree.into());
+                    }
+                },
+            ) {
+                commit.set_tree(new_tree_hash);
+            }
+            
+            // write out changes if any
+            if commit.has_changes() {
+                let commit = Commit::create(None, commit.to_bytes(), false);
+                rewritten_commits.insert(old_hash, commit.hash().clone());
+                tx.send(commit).unwrap();    
+            }
         }
+
+        std::mem::drop(tx);
         
-        // write out changes if any
-        if commit.has_changes() {
-            let commit = Commit::create(None, commit.to_bytes(), false);
-            rewritten_commits.insert(old_hash, commit.hash().clone());
-            tx.send(commit).unwrap();    
+        if !dry_run {
+            repository.update_refs(&rewritten_commits);
         }
-    }
-
-    std::mem::drop(tx);
-    write_thread.join().unwrap();
-
-    if !dry_run {
-        repository.update_refs(&rewritten_commits);
-    }
+    });
 }
 
 fn update_parents(commit: &mut Commit, rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>) {
