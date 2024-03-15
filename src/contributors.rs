@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, path::PathBuf, sync::mpsc::channel, thread::spawn};
+use std::{collections::HashMap, error::Error, io::stdin, path::PathBuf, sync::mpsc::channel, thread::spawn};
 
 use bstr::{io::BufReadExt, BString, ByteSlice};
 use libgitrw::{
@@ -17,18 +17,19 @@ fn split_index(line: &[u8]) -> Option<usize> {
     None
 }
 
-fn get_mappings(file_path: &str) -> Result<FxHashMap<Vec<u8>, Vec<u8>>, Box<dyn Error>> {
-    let file = std::io::BufReader::new(std::fs::File::open(file_path).unwrap());
-
+fn get_mappings() -> Result<FxHashMap<Vec<u8>, Vec<u8>>, Box<dyn Error>> {
     let mut mappings = FxHashMap::default();
 
-    for line in file.byte_lines() {
+    for line in stdin().lock().byte_lines() {
         let line = line?;
         let split_pos = split_index(&line).ok_or("Line is malformed. Pattern: old = new")?;
 
         let old = line[0..split_pos].trim().to_owned();
         let new = line[split_pos + 1..].trim().to_owned();
-        let _ = mappings.insert(old, new);
+
+        if old != new {
+            mappings.insert(old, new);
+        }
     }
 
     Ok(mappings)
@@ -36,10 +37,9 @@ fn get_mappings(file_path: &str) -> Result<FxHashMap<Vec<u8>, Vec<u8>>, Box<dyn 
 
 pub fn rewrite(
     repository_path: PathBuf,
-    file_path: &str,
     dry_run: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mappings = get_mappings(file_path)?;
+    let mappings = get_mappings()?;
 
     let (tx, rx) = channel();
     let write_path = repository_path.clone();

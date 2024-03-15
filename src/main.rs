@@ -60,11 +60,8 @@ enum Commands {
 enum ContributorArgs {
     /// Lists all authors and committers
     List,
-    /// Allows to rewrite contributors
-    Rewrite {
-        /// Format inside file: Old User <old@user.mail> = New User <new@user.mail>
-        mapping_file: String,
-    },
+    /// Allows to rewrite contributors. Expects stdin input lines with the format: Old User <old@user.mail> = New User <new@user.mail>
+    Rewrite,
 }
 
 fn main() {
@@ -81,8 +78,8 @@ fn main() {
                 )
                 .unwrap();
             }
-            ContributorArgs::Rewrite { mapping_file } => {
-                contributors::rewrite(repository_path, mapping_file.as_str(), cli.dry_run).unwrap();
+            ContributorArgs::Rewrite => {
+                contributors::rewrite(repository_path, cli.dry_run).unwrap();
             }
         },
         Commands::Remove { file, directory, regex } => {
