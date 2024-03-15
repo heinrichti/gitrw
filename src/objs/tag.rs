@@ -1,6 +1,6 @@
 use bstr::{BStr, ByteSlice, ByteVec, Lines};
 
-use crate::{objs::TagTargetType, shared::RefSlice};
+use crate::{objs::TagTargetType, shared::RefSlice, WriteBytes};
 
 use super::{ObjectHash, Tag};
 
@@ -87,8 +87,11 @@ impl Tag {
         );
     }
 
-    pub(crate) fn bytes(&self) -> &[u8] {
-        &self.bytes[self.bytes_start..]
+    pub(crate) fn bytes(self) -> WriteBytes {
+        WriteBytes {
+            bytes: self.bytes,
+            start: self.bytes_start,
+        }
     }
 
     pub fn to_bytes(&self) -> Box<[u8]> {

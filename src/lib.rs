@@ -9,7 +9,7 @@ use std::{
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
-use objs::{Commit, CommitHash, GitObject, Tag, Tree};
+use objs::{CommitEditable, CommitBase, CommitHash, GitObject, Tag, Tree};
 use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
@@ -41,18 +41,25 @@ impl Clone for Repository {
     }
 }
 
-pub struct WriteObject {
-    hash: ObjectHash,
-    prefix: String,
-    bytes: Vec<u8>,
+#[derive(Debug)]
+pub struct WriteBytes {
+    bytes: Box<[u8]>,
+    start: usize,
 }
 
-impl From<Commit> for WriteObject {
-    fn from(value: Commit) -> Self {
+pub struct WriteObject {
+    pub hash: ObjectHash,
+    prefix: String,
+    bytes: WriteBytes,
+}
+
+impl From<CommitEditable> for WriteObject {
+    fn from(value: CommitEditable) -> Self {
+        let wb = value.to_bytes();
         Self {
-            hash: value.hash().0.clone(),
+            hash: calculate_hash(&wb.bytes, b"commit"),
             prefix: String::from("commit"),
-            bytes: value.bytes().to_owned(),
+            bytes: wb,
         }
     }
 }
@@ -62,7 +69,7 @@ impl From<Tag> for WriteObject {
         Self {
             hash: value.hash().clone(),
             prefix: String::from("tag"),
-            bytes: value.bytes().to_owned(),
+            bytes: value.bytes(),
         }
     }
 }
@@ -72,7 +79,7 @@ impl From<Tree> for WriteObject {
         Self {
             hash: value.hash().0.clone(),
             prefix: String::from("tree"),
-            bytes: value.bytes().to_owned(),
+            bytes: value.bytes(),
         }
     }
 }
@@ -104,7 +111,11 @@ impl Repository {
         commits::read_object_from_hash(&mut compression, &self.path, &self.pack_reader, hash)
     }
 
-    pub fn write(mut repo_path: PathBuf, object: WriteObject) {
+    pub fn write(mut repo_path: PathBuf, object: WriteObject, dry_run: bool) {
+        if dry_run {
+            return;
+        }
+
         let hash = object.hash.to_string();
         let data = object.bytes;
         let prefix = object.prefix;
@@ -122,14 +133,13 @@ impl Repository {
 
     pub fn write_commits(
         repository_path: PathBuf,
-        commits: impl Iterator<Item = Commit> + Send,
+        commits: impl Iterator<Item = WriteObject> + Send,
         dry_run: bool,
     ) {
         commits
             .par_bridge()
-            .filter(|_| !dry_run)
             .for_each(|commit| {
-                Self::write(repository_path.clone(), commit.into());
+                Self::write(repository_path.clone(), commit, dry_run);
             });
     }
 
@@ -140,17 +150,16 @@ impl Repository {
     ) {
         trees
             .par_bridge()
-            .filter(|_| !dry_run)
             .for_each(|tree| {
-                Self::write(repository_path.clone(), tree.into());
+                Self::write(repository_path.clone(), tree.into(), dry_run);
             });
     }
 
-    pub fn commits_topo(&self) -> impl Iterator<Item = Commit> + '_ {
+    pub fn commits_topo(&self) -> impl Iterator<Item = CommitBase> + '_ {
         CommitsFifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
-    pub fn commits_lifo(&self) -> impl Iterator<Item = Commit> + '_ {
+    pub fn commits_lifo(&self) -> impl Iterator<Item = CommitBase> + '_ {
         CommitsLifoIter::create(&self.path, &self.pack_reader, Decompression::default())
     }
 
@@ -161,8 +170,11 @@ impl Repository {
     pub fn update_refs<T: BuildHasher>(
         &self,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
+        dry_run: bool
     ) {
-        refs::GitRef::update(self, rewritten_commits);
+        if !dry_run {
+            refs::GitRef::update(self, rewritten_commits, dry_run);
+        }
     }
 
     pub fn write_rewritten_commits_file(
@@ -171,7 +183,12 @@ impl Repository {
             CommitHash,
             std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
         >,
+        dry_run: bool
     ) {
+        if dry_run {
+            return;
+        }
+
         let file = std::fs::File::create("object-id-map.old-new.txt").unwrap();
         let mut writer = BufWriter::new(file);
         for (old, new) in rewritten_commits.iter() {

@@ -2,7 +2,7 @@ use std::{borrow::Cow, fmt::Display};
 
 use bstr::{BStr, ByteSlice, ByteVec};
 
-use crate::shared::{self, RefSlice};
+use crate::{shared::{self, RefSlice}, WriteBytes};
 
 use super::{ObjectHash, Tree, TreeHash};
 
@@ -52,8 +52,11 @@ impl Tree {
         })
     }
 
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes[self.bytes_start..]
+    pub fn bytes(self) -> WriteBytes {
+        WriteBytes {
+            bytes: self.bytes,
+            start: self.bytes_start,
+        }
     }
 }
 

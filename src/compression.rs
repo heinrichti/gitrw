@@ -10,7 +10,7 @@ use libdeflater::Decompressor;
 use memmap2::Mmap;
 use once_cell::sync::Lazy;
 
-use crate::packreader::PackObject;
+use crate::{packreader::PackObject, WriteBytes};
 
 pub struct Decompression {
     libdeflate_decompressor: Decompressor,
@@ -28,13 +28,14 @@ impl Default for Decompression {
     }
 }
 
-pub fn pack_file(path: &Path, prefix: &str, data: &[u8]) {
+pub fn pack_file(path: &Path, prefix: &str, write_bytes: &WriteBytes) {
     let file = File::options()
         .read(true)
         .write(true)
         .create_new(true)
         .open(path)
         .unwrap();
+    let data = &write_bytes.bytes[write_bytes.start..];
     let mut buf_writer = BufWriter::new(file);
     let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
 

@@ -10,12 +10,12 @@ use std::{
 use rustc_hash::FxHashMap;
 
 use libgitrw::{
-    objs::{Commit, CommitHash, TreeHash},
-    Repository,
+    objs::{CommitEditable, CommitHash, TreeHash},
+    Repository, WriteObject,
 };
 
-fn parent_if_empty<T: BuildHasher>(
-    commit: &Commit,
+fn get_parent_if_empty_commit<T: BuildHasher>(
+    commit: &CommitEditable,
     rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
     commit_trees: &HashMap<CommitHash, TreeHash, T>,
 ) -> Option<CommitHash> {
@@ -38,18 +38,18 @@ fn parent_if_empty<T: BuildHasher>(
 
 fn find_empty_commits(
     repository: &mut Repository,
-    tx: Sender<Commit>,
+    tx: Sender<WriteObject>,
 ) -> FxHashMap<CommitHash, CommitHash> {
     let mut rewritten_commits: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
     let mut commit_trees: FxHashMap<CommitHash, TreeHash> = FxHashMap::default();
 
-    for mut commit in repository.commits_topo() {
-        if let Some(parent) = parent_if_empty(&commit, &rewritten_commits, &commit_trees) {
-            rewritten_commits.insert(commit.hash().clone(), parent);
+    for mut commit in repository.commits_topo().map(|c| CommitEditable::create(c)) {
+        if let Some(parent) = get_parent_if_empty_commit(&commit, &rewritten_commits, &commit_trees) {
+            rewritten_commits.insert(commit.base_hash().clone(), parent);
             continue;
         }
 
-        let commit_hash = commit.hash().clone();
+        let base_hash = commit.base_hash().clone();
         commit
             .parents()
             .iter()
@@ -57,12 +57,16 @@ fn find_empty_commits(
             .enumerate()
             .for_each(|(i, parent)| commit.set_parent(i, parent));
 
-        let commit = Commit::create(None, commit.to_bytes(), false);
-        commit_trees.insert(commit.hash().clone(), commit.tree());
+        let commit_tree = commit.tree();
+        let w: WriteObject = commit.into();
 
-        if &commit_hash != commit.hash() {
-            rewritten_commits.insert(commit_hash, commit.hash().clone());
-            tx.send(commit).unwrap();
+        let new_hash: CommitHash = w.hash.clone().into();
+        commit_trees.insert(CommitHash::from(new_hash.clone()), commit_tree);
+
+        
+        if &base_hash != &new_hash {
+            rewritten_commits.insert(base_hash, new_hash.clone());
+            tx.send(w).unwrap();
         }
     }
 
@@ -81,9 +85,9 @@ pub fn remove_empty_commits(repository_path: PathBuf, dry_run: bool) -> Result<(
 
     thread.join().unwrap();
 
-    if !rewritten_commits.is_empty() && !dry_run {
-        repository.update_refs(&rewritten_commits);
-        Repository::write_rewritten_commits_file(rewritten_commits);
+    if !rewritten_commits.is_empty() {
+        repository.update_refs(&rewritten_commits, dry_run);
+        Repository::write_rewritten_commits_file(rewritten_commits, dry_run);
     }
 
     Ok(())

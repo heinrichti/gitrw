@@ -194,6 +194,7 @@ dependencies = [
  "hex",
  "itertools",
  "libdeflater",
+ "memchr",
  "memmap2",
  "mimalloc",
  "once_cell",

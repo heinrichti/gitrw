@@ -5,7 +5,7 @@ use bstr::ByteSlice;
 use rustc_hash::FxHashSet;
 
 use crate::{
-    objs::{Commit, CommitHash, Tag, Tree},
+    objs::{CommitBase, CommitHash, Tag, Tree},
     shared::ObjectHash,
 };
 
@@ -20,7 +20,7 @@ pub(crate) struct CommitsFifoIter<'a> {
     pack_reader: &'a PackReader,
     compression: Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit>,
+    commits: Vec<CommitBase>,
     processed_commits: FxHashSet<CommitHash>,
     parents_seen: FxHashSet<CommitHash>,
 }
@@ -63,16 +63,16 @@ impl<'a> CommitsFifoIter<'a> {
 }
 
 impl<'a> Iterator for CommitsFifoIter<'a> {
-    type Item = Commit;
+    type Item = CommitBase;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
-            if self.processed_commits.contains(commit.hash()) {
-                self.parents_seen.remove(commit.hash());
-            } else if !self.parents_seen.insert(commit.hash().clone())
-                || commit.parents().is_empty()
+            if self.processed_commits.contains(&commit.hash) {
+                self.parents_seen.remove(&commit.hash);
+            } else if !self.parents_seen.insert(commit.hash.clone())
+                || commit.parents.is_empty()
             {
-                self.processed_commits.insert(commit.hash().clone());
+                self.processed_commits.insert(commit.hash.clone());
                 return Some(commit);
             } else {
                 let parents = commit.parents();
@@ -104,7 +104,7 @@ pub(crate) struct CommitsLifoIter<'a> {
     pack_reader: &'a PackReader,
     decompression: Decompression,
     repository_path: &'a Path,
-    commits: Vec<Commit>,
+    commits: Vec<CommitBase>,
     processed_commits: FxHashSet<CommitHash>,
 }
 
@@ -144,12 +144,16 @@ impl<'a> CommitsLifoIter<'a> {
 }
 
 impl<'a> Iterator for CommitsLifoIter<'a> {
-    type Item = Commit;
+    type Item = CommitBase;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(commit) = self.commits.pop() {
-            if self.processed_commits.insert(commit.hash().clone()) {
-                for parent in commit.parents() {
+            if self.processed_commits.insert(commit.hash.clone()) {
+                for parent in commit
+                    .parents
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| commit.get_str(|c| &c.parents[i]).try_into().unwrap()) {
                     if !self.processed_commits.contains(&parent) {
                         if let Some(parent_commit) = read_object_from_hash(
                             &mut self.decompression,
@@ -215,8 +219,8 @@ pub(crate) fn read_object_from_hash(
 
     if let Ok(bytes) = compression.unpack_file(repository_path, &hash.to_string()) {
         if bytes.starts_with(b"commit ") {
-            return Some(GitObject::Commit(Commit::create(
-                Some(hash.into()),
+            return Some(GitObject::Commit(CommitBase::create(
+                hash.into(),
                 bytes,
                 true,
             )));

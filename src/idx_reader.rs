@@ -75,7 +75,7 @@ pub fn get_pack_offsets(idx_path: &Path) -> Result<Vec<PackOffset>, Box<dyn Erro
     for large_offset in large_offsets {
         reader.read_exact(&mut pack_offset)?;
         result.push(PackOffset {
-            hash: ObjectHash::from(large_offset),
+            hash: large_offset.into(),
             offset: usize::from_be_bytes(pack_offset),
         });
     }

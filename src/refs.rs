@@ -86,9 +86,10 @@ impl GitRef {
     pub fn update<T: BuildHasher>(
         repository: &Repository,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
+        dry_run: bool,
     ) {
         for r in repository.refs().unwrap() {
-            Self::rewrite_ref(repository, r.get_name(), r.get_target(), rewritten_commits);
+            Self::rewrite_ref(repository, r.get_name(), r.get_target(), rewritten_commits, dry_run);
         }
 
         let mut path = repository.path.clone();
@@ -113,6 +114,7 @@ impl GitRef {
         ref_name: &BStr,
         ref_target: &BStr,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
+        dry_run: bool,
     ) -> ObjectHash {
         let tag_target_obj = repository
             .read_object(ref_target.try_into().unwrap())
@@ -130,14 +132,13 @@ impl GitRef {
                 rewritten_target.clone().0
             }
             crate::objs::GitObject::Tree(tree) => {
-                // TODO update tree once we start rewriting trees
                 Self::write_ref(
                     repository.path.to_str().unwrap(),
                     ref_name.to_str().unwrap(),
                     ref_target.to_str().unwrap(),
                 );
 
-                tree.hash().clone().0
+                tree.hash().0.clone()
             }
             crate::objs::GitObject::Tag(mut target_tag) => match target_tag.target_type() {
                 TagTargetType::Commit => {
@@ -148,7 +149,7 @@ impl GitRef {
                     target_tag.set_object(target_tag_object.clone().0);
                     let tag = Tag::create(None, target_tag.to_bytes(), false);
                     let tag_hash = tag.hash().clone();
-                    Repository::write(repository.path.clone(), tag.into());
+                    Repository::write(repository.path.clone(), tag.into(), dry_run);
                     let target_hash = tag_hash;
 
                     Self::write_ref(
@@ -161,7 +162,7 @@ impl GitRef {
                 }
                 TagTargetType::Tree => {
                     let target_tag_hash = target_tag.hash().clone();
-                    Repository::write(repository.path.clone(), target_tag.into());
+                    Repository::write(repository.path.clone(), target_tag.into(), dry_run);
                     target_tag_hash
                 }
                 TagTargetType::Tag => {

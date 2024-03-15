@@ -2,8 +2,8 @@ use std::{collections::HashMap, error::Error, io::stdin, path::PathBuf, sync::mp
 
 use bstr::{io::BufReadExt, BString, ByteSlice};
 use libgitrw::{
-    objs::{Commit, CommitHash},
-    Repository,
+    objs::{CommitEditable, CommitHash},
+    Repository, WriteObject,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -48,40 +48,35 @@ pub fn rewrite(
 
     let repository = Repository::create(repository_path);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    for mut commit in repository.commits_topo() {
-        let old_hash = commit.hash().clone();
-        let mut changed = false;
-
+    for mut commit in repository.commits_topo().map(|c| CommitEditable::create(c)) {
         if let Some(new_author) = mappings.get(commit.author_bytes()) {
             commit.set_author(new_author.clone());
-            changed = true;
         }
 
         if let Some(new_committer) = mappings.get(commit.committer_bytes()) {
             commit.set_committer(new_committer.clone());
-            changed = true;
         }
 
         for (i, parent) in commit.parents().iter().enumerate() {
             if let Some(new_commit_hash) = rewritten_commits.get(parent) {
                 commit.set_parent(i, new_commit_hash.clone());
-                changed = true;
             }
         }
 
-        if changed {
-            commit = Commit::create(None, commit.to_bytes(), false);
-            rewritten_commits.insert(old_hash, commit.hash().clone());
-            tx.send(commit).unwrap();
+        if commit.has_changes() {
+            let old_hash = commit.base_hash().clone();
+            let w: WriteObject = commit.into();
+            rewritten_commits.insert(old_hash, CommitHash::from(w.hash.clone()));
+            tx.send(w).unwrap();
         }
     }
 
     drop(tx);
     write_thread.join().expect("Failed to write commits");
 
-    if !rewritten_commits.is_empty() && !dry_run {
-        repository.update_refs(&rewritten_commits);
-        Repository::write_rewritten_commits_file(rewritten_commits);
+    if !rewritten_commits.is_empty() {
+        repository.update_refs(&rewritten_commits, dry_run);
+        Repository::write_rewritten_commits_file(rewritten_commits, dry_run);
     }
 
     Ok(())

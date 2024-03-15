@@ -10,8 +10,8 @@ use rustc_hash::FxHashMap;
 
 use crate::compression::Decompression;
 use crate::idx_reader::get_pack_offsets;
-use crate::objs::Tag;
-use crate::objs::{Commit, GitObject, Tree};
+use crate::objs::{CommitBase, Tag};
+use crate::objs::{GitObject, Tree};
 use crate::pack_diff::PackDiff;
 use crate::shared::ObjectHash;
 
@@ -95,7 +95,7 @@ impl PackReader {
             }
 
             let git_object = match pack_object.object_type {
-                1u8 => GitObject::Commit(Commit::create(Some(object_hash.into()), bytes, false)),
+                1u8 => GitObject::Commit(CommitBase::create(object_hash.into(), bytes, false)),
                 2u8 => GitObject::Tree(Tree::create(object_hash.into(), bytes, false)),
                 // 3u8 => GitObject::Blob(Blob::create(object_hash, bytes)),
                 4u8 => GitObject::Tag(Tag::create(object_hash.into(), bytes, false)),
