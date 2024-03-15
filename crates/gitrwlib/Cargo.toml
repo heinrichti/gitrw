@@ -10,13 +10,9 @@ hex = "0.4.3"
 memmap2 = "0.5.10"
 bstr = "1.3.0"
 rustc-hash = "1.1.0"
-mimalloc = { version = "0.1.34", default-features = false }
-clap = { version = "4.1.8", features = ["derive"] }
 libdeflater = { version = "0.12.0", features = ["use_rust_alloc"] }
 flate2 = { version = "1.0.25", default-features = false, features = ["default"] }
 rs_sha1 = "0.1.3"
 rayon = "1.7.0"
 once_cell = "1.18.0"
-itertools = "0.12.1"
-regex = "1.10.3"
 memchr = "2.7.1"
