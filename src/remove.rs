@@ -1,13 +1,15 @@
 use core::panic;
-use std::{borrow::Cow, cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, Arc, RwLock}};
+use std::{borrow::Cow, cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, RwLock}};
 
 use bstr::ByteSlice;
+
 use libgitrw::{
     objs::{Commit, CommitHash, Tree, TreeHash},
     Repository,
 };
 use rustc_hash::FxHashMap;
 use rayon::prelude::*;
+use regex::bytes::RegexSet;
 
 macro_rules! b {
     ( $x:expr ) => {
@@ -24,8 +26,8 @@ fn last_index_of(path: &[u8], needle: u8) -> Option<usize> {
     None
 }
 
-type DynFn<'a> = Box<dyn Fn(&'a [u8]) -> bool + 'a + Sync + Send>;
-type DynFn2<'a> = Box<dyn Fn(&[u8], &[u8]) -> bool + 'a + Sync + Send>;
+type DynFn<'a> = Box<dyn Fn(&[u8]) -> bool + Sync + Send + 'a>;
+type DynFn2<'a> = Box<dyn Fn(&[u8], &[u8]) -> bool + Sync + Send + 'a>;
 
 fn build_folder_delete_patterns(folders: &[String]) -> DynFn {
     let mut delete_folder: DynFn = Box::new(|_path| false);
@@ -67,6 +69,18 @@ fn build_folder_delete_patterns(folders: &[String]) -> DynFn {
     }
 
     delete_folder
+}
+
+fn build_regex_pattern(patterns: &[String]) -> DynFn2 {
+    if patterns.is_empty() {
+        return b!(|_, _| false);
+    }
+
+    let regexes = RegexSet::new(patterns).unwrap();
+    b!(move |folder, file| {
+        let path = [folder, file].concat();
+        regexes.is_match(&path)
+    })
 }
 
 fn build_file_delete_patterns(files: &[String]) -> DynFn2 {
@@ -127,7 +141,8 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     repository: &Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
-    rewritten_trees: &Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, T>>>,
+    should_remove: &DynFn2,
+    rewritten_trees: &RwLock<HashMap<TreeHash, Option<TreeHash>, T>>,
     write_tree: &(impl Fn(Tree) + Sync + Send),
 ) -> Option<TreeHash> {
     if let Some(rewritten_hash_option) = rewritten_trees.read().unwrap().get(&tree_hash) {
@@ -140,17 +155,19 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     };
 
     let old_hash = tree.hash();
-    let lines: Vec<_> = tree.lines().collect();
-    let tree: Tree = lines
+    let tree: Tree = tree.lines()
         .into_iter()
+        .filter(|line| if line.is_tree() { !should_delete_folder(line.filename()) } else { !should_delete_file(path, line.filename()) })
+        .filter(|line| !should_remove(path, line.filename()))
         .map(|mut line| {
             if line.is_tree() {
                 if let Some(new_tree_hash) = update_tree(
                     line.hash.deref().clone(),
                     &[path, line.filename(), b"/"].concat(),
                     repository,
-                    should_delete_file,
-                    should_delete_folder,
+                    &should_delete_file,
+                    &should_delete_folder,
+                    &should_remove,
                     rewritten_trees,
                     write_tree,
                 ) {
@@ -161,7 +178,6 @@ fn update_tree<T: BuildHasher + Sync + Send>(
             line
         })
         .collect();
-
 
     if old_hash == tree.hash() {
         rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
@@ -204,10 +220,11 @@ pub fn remove(
     repository_path: PathBuf,
     files: Vec<String>,
     directories: Vec<String>,
+    regexes: Vec<String>,
     dry_run: bool,
 ) {
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let rewritten_trees: Arc<RwLock<HashMap<TreeHash, Option<TreeHash>, _>>> = Arc::new(RwLock::new(FxHashMap::default()));
+    let rewritten_trees: RwLock<HashMap<TreeHash, Option<TreeHash>, _>> = RwLock::new(FxHashMap::default());
 
     let repository = Repository::create(repository_path.clone());
 
@@ -245,8 +262,9 @@ pub fn remove(
         });
 
         let file_delete_patterns = build_file_delete_patterns(&files);
-        let folder_delete_patterns = build_folder_delete_patterns(&directories);    
-        repository.commits_topo().enumerate().map(|a| OrderedCommit { index: a.0, commit: a.1}).par_bridge().for_each(|commit| {
+        let folder_delete_patterns = build_folder_delete_patterns(&directories);
+        let should_remove_line = build_regex_pattern(&regexes);
+        repository.commits_topo().enumerate().map(|(index, commit)| OrderedCommit { index, commit }).par_bridge().for_each(|commit| {
             let old_tree_hash = commit.commit.tree();
             update_tree(
                 old_tree_hash,
@@ -254,6 +272,7 @@ pub fn remove(
                 &repository,
                 &file_delete_patterns,
                 &folder_delete_patterns,
+                &should_remove_line,
                 &rewritten_trees,
                 &|tree| {
                     if !dry_run {

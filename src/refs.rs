@@ -261,6 +261,7 @@ mod test {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn read_packed_refs() {
         let test = GitRef::read_all(std::path::Path::new(".git")).expect("Cannot read file");
         dbg!(test);

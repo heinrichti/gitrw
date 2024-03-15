@@ -17,8 +17,6 @@ pub struct SliceIndexes {
     len: usize,
 }
 
-unsafe impl Send for SliceIndexes {}
-
 impl SliceIndexes {
     pub fn new(position: usize, len: usize) -> Self {
         Self { position, len }

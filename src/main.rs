@@ -46,6 +46,10 @@ enum Commands {
         /// Directory to remove. Argument can be specified multiple times
         #[arg(short, long, group = "input")]
         directory: Option<Vec<String>>,
+
+        /// Regex to remove files. Matches on the whole path including the filename. Argument can be specified multiple times
+        #[arg(short, long, group = "input")]
+        regex: Option<Vec<String>>,
     },
 
     /// Remove empty commits that are no merge commits
@@ -81,11 +85,12 @@ fn main() {
                 contributors::rewrite(repository_path, mapping_file.as_str(), cli.dry_run).unwrap();
             }
         },
-        Commands::Remove { file, directory } => {
+        Commands::Remove { file, directory, regex } => {
             remove::remove(
                 repository_path,
                 file.unwrap_or_default(),
                 directory.unwrap_or_default(),
+                regex.unwrap_or_default(),
                 cli.dry_run,
             );
         }
