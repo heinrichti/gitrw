@@ -113,29 +113,6 @@ fn print_locked<T: Display>(items: impl Iterator<Item = T>) -> Result<(), Box<dy
     Ok(())
 }
 
-// pub fn print_tree(repository_path: &Path, object_hash: ObjectHash) -> Result<(), Box<dyn Error>> {
-//     let pack_reader = PackReader::create(repository_path)?;
-//     let mut compression = Compression::new();
-
-//     let obj = pack_reader
-//         .read_git_object(&mut compression, object_hash.clone());
-
-//     if obj.is_some() {
-//         match obj.unwrap() {
-//             GitObject::Tree(tree) => println!("{tree}"),
-//             _ => panic!(),
-//         };
-//     }
-//     else {
-//         if let Ok(bytes) = compression.from_file(repository_path, &object_hash.to_string()) {
-//             let tree = Tree::create(object_hash, bytes, true);
-//             println!("{tree}");
-//         } else { panic!() };
-//     }
-
-//     Ok(())
-// }
-
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc::channel;
