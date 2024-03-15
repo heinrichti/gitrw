@@ -4,7 +4,7 @@ use std::{
 };
 
 use bstr::{io::BufReadExt, BString, ByteSlice};
-use libgitrw::{
+use gitrwlib::{
     objs::{CommitEditable, CommitHash},
     Repository, WriteObject,
 };

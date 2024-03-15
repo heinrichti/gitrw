@@ -9,7 +9,7 @@ use std::{
 
 use rustc_hash::FxHashMap;
 
-use libgitrw::{
+use gitrwlib::{
     objs::{CommitEditable, CommitHash, TreeHash},
     Repository, WriteObject,
 };

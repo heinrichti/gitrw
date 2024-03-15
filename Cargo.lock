@@ -191,6 +191,27 @@ dependencies = [
  "bstr",
  "clap",
  "flate2",
+ "gitrwlib",
+ "hex",
+ "itertools",
+ "libdeflater",
+ "memchr",
+ "memmap2",
+ "mimalloc",
+ "once_cell",
+ "rayon",
+ "regex",
+ "rs_sha1",
+ "rustc-hash",
+]
+
+[[package]]
+name = "gitrwlib"
+version = "0.1.0"
+dependencies = [
+ "bstr",
+ "clap",
+ "flate2",
  "hex",
  "itertools",
  "libdeflater",

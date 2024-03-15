@@ -11,7 +11,7 @@ use std::{
 
 use bstr::ByteSlice;
 
-use libgitrw::{
+use gitrwlib::{
     objs::{CommitBase, CommitEditable, CommitHash, Tree, TreeHash},
     Repository, WriteObject,
 };
@@ -158,7 +158,7 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     }
 
     let tree: Tree = match repository.read_object(tree_hash.into()).unwrap() {
-        libgitrw::objs::GitObject::Tree(tree) => tree,
+        gitrwlib::objs::GitObject::Tree(tree) => tree,
         _ => panic!("Expected a tree, found something else"),
     };
 
