@@ -39,15 +39,15 @@ enum Commands {
                         .required(true)
                         .multiple(true)))]
     Remove {
-        /// File to remove. Argument can be specified multiple times
+        /// File to remove. The char '*' can be used as a wildcard at the beginning or end. Path can be absolute or relative, depending on if a '/' is present. Argument can be specified multiple times
         #[arg(short, long, group = "input")]
         file: Option<Vec<String>>,
 
-        /// Directory to remove. Argument can be specified multiple times
+        /// Directory to remove. The char '*' can be used as a wildcard at the begining or end. Path can be absolute or relative, depending on if it starts with a '/'. Argument can be specified multiple times
         #[arg(short, long, group = "input")]
         directory: Option<Vec<String>>,
 
-        /// Regex to remove files. Matches on the whole path including the filename. Argument can be specified multiple times
+        /// Regex to remove files. Matches on the whole path including the filename, which makes it a little more expensive than the file or directory options. Argument can be specified multiple times
         #[arg(short, long, group = "input")]
         regex: Option<Vec<String>>,
     },
