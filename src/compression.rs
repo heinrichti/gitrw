@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{self, BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -28,13 +28,12 @@ impl Default for Decompression {
     }
 }
 
-pub fn pack_file(path: &Path, prefix: &str, write_bytes: &WriteBytes) {
+pub fn pack_file(path: &Path, prefix: &str, write_bytes: &WriteBytes) -> Result<(), io::Error> {
     let file = File::options()
         .read(true)
         .write(true)
         .create_new(true)
-        .open(path)
-        .unwrap();
+        .open(path)?;
     let data = &write_bytes.bytes[write_bytes.start..];
     let mut buf_writer = BufWriter::new(file);
     let preamble: Vec<_> = format!("{} {}\0", prefix, data.len()).bytes().collect();
@@ -47,6 +46,8 @@ pub fn pack_file(path: &Path, prefix: &str, write_bytes: &WriteBytes) {
     buf_writer
         .write_all(&data)
         .unwrap();
+
+    Ok(())
 }
 
 impl Decompression {

@@ -1,8 +1,9 @@
+use core::panic;
 use std::{
     collections::HashMap,
     error::Error,
     hash::{BuildHasher, Hasher},
-    io::{BufWriter, Write},
+    io::{self, BufWriter, Write},
     path::{Path, PathBuf},
 };
 
@@ -130,7 +131,15 @@ impl Repository {
 
         repo_path.push(&hash[2..]);
         if !Path::new(&repo_path).exists() {
-            compression::pack_file(&repo_path, prefix.as_str(), &data);
+            match compression::pack_file(&repo_path, prefix.as_str(), &data) {
+                Ok(_) => {},
+                Err(e) => {
+                    match e.kind() {
+                        io::ErrorKind::AlreadyExists => {},
+                        _ => panic!("Error writing object: {}", e)
+                    }
+                }
+            }
         }
     }
 
