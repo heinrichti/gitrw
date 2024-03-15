@@ -13,9 +13,13 @@ crate-type = ["cdylib", "rlib", "staticlib"]
 
 [profile.release]
 #debug = true
-strip="debuginfo"
+strip="none"
 lto = true
 codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+debug = 0
 
 [dependencies]
 hex = "0.4.3"

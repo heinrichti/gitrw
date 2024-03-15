@@ -115,11 +115,11 @@ impl CommitBase {
     }
 
     pub fn author(&self) -> &bstr::BStr {
-        self.author.get(&self.bytes.bytes).as_bstr()
+        self.get_str(|c| &c.author)
     }
     
     pub fn committer(&self) -> &bstr::BStr {
-        self.committer.get(&self.bytes.bytes).as_bstr()
+        self.get_str(|c| &c.committer)
     }
 
     pub fn tree(&self) -> TreeHash {
