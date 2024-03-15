@@ -311,6 +311,7 @@ pub fn remove(
     });
 
     repository.update_refs(&rewritten_commits, dry_run);
+    Repository::write_rewritten_commits_file(rewritten_commits, dry_run);
 }
 
 fn update_commit(
