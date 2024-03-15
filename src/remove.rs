@@ -138,7 +138,7 @@ fn build_file_delete_patterns(files: &[String]) -> DynFn2 {
 fn update_tree<T: BuildHasher + Sync + Send>(
     tree_hash: TreeHash,
     path: &[u8],
-    repository: &Repository,
+    repository: &mut Repository,
     should_delete_file: &DynFn2,
     should_delete_folder: &DynFn,
     should_remove: &DynFn2,
@@ -155,34 +155,50 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     };
 
     let old_hash = tree.hash();
-    let tree: Tree = tree.lines()
-        .into_iter()
-        .filter(|line| if line.is_tree() { !should_delete_folder(line.filename()) } else { !should_delete_file(path, line.filename()) })
-        .filter(|line| !should_remove(path, line.filename()))
-        .map(|mut line| {
-            if line.is_tree() {
-                if let Some(new_tree_hash) = update_tree(
-                    line.hash.deref().clone(),
-                    &[path, line.filename(), b"/"].concat(),
-                    repository,
-                    &should_delete_file,
-                    &should_delete_folder,
-                    &should_remove,
-                    rewritten_trees,
-                    write_tree,
-                ) {
-                    line.hash = Cow::Owned(new_tree_hash);
-                }
+
+    let mut filtered_lines = vec![];
+    let mut tree_changed = false;
+    for mut line in tree.lines() {
+        if line.is_tree() {
+            let full_path = [path, line.filename(), b"/"].concat();
+
+            if should_delete_folder(&full_path) {
+                tree_changed = true;
+                continue;
             }
 
-            line
-        })
-        .collect();
+            if let Some(new_tree_hash) = update_tree(
+                line.hash.deref().clone(),
+                &full_path,
+                repository,
+                should_delete_file,
+                should_delete_folder,
+                should_remove,
+                rewritten_trees,
+                write_tree,
+            ) {
+                tree_changed = true;
+                line.hash = Cow::Owned(new_tree_hash);
+            }
+        } else {
+            if should_delete_file(path, line.filename()) {
+                tree_changed = true;
+                continue;
+            }
+            if should_remove(path, line.filename()) {
+                tree_changed = true;
+                continue;
+            }
+        }
 
-    if old_hash == tree.hash() {
+        filtered_lines.push(line);
+    }
+
+    if !tree_changed {
         rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
         None
     } else {
+        let tree: Tree = filtered_lines.into_iter().collect();
         let new_hash = tree.hash().clone();
         rewritten_trees.write().unwrap().insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
@@ -226,9 +242,7 @@ pub fn remove(
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
     let rewritten_trees: RwLock<HashMap<TreeHash, Option<TreeHash>, _>> = RwLock::new(FxHashMap::default());
 
-    let repository = Repository::create(repository_path.clone());
-
-    rayon::scope(|scope| {
+    let mut repository = rayon::scope(|scope| {
         let (tx, rx) = channel::<OrderedCommit>();
         scope.spawn(|_| {
             let mut heap: BinaryHeap<Reverse<OrderedCommit>> = BinaryHeap::new();
@@ -263,18 +277,19 @@ pub fn remove(
             }
         });
 
+        let repository = Repository::create(repository_path.clone());
         let file_delete_patterns = build_file_delete_patterns(&files);
         let folder_delete_patterns = build_folder_delete_patterns(&directories);
         let should_remove_line = build_regex_pattern(&regexes);
         repository.commits_topo().enumerate()
             .map(|(index, commit)| OrderedCommit { index, commit })
             .par_bridge()
-            .for_each(|commit| {
+            .for_each_with(repository.clone(), |repository, commit| {
             let old_tree_hash = commit.commit.tree();
             update_tree(
                 old_tree_hash,
                 b"/",
-                &repository,
+                repository,
                 &file_delete_patterns,
                 &folder_delete_patterns,
                 &should_remove_line,
@@ -291,6 +306,8 @@ pub fn remove(
         });
 
         std::mem::drop(tx);
+
+        repository
     });
 
     repository.update_refs(&rewritten_commits, dry_run);

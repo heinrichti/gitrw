@@ -84,7 +84,7 @@ impl GitRef {
     }
 
     pub fn update<T: BuildHasher>(
-        repository: &Repository,
+        repository: &mut Repository,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
         dry_run: bool,
     ) {
@@ -110,7 +110,7 @@ impl GitRef {
     }
 
     fn rewrite_ref<T: BuildHasher>(
-        repository: &Repository,
+        repository: &mut Repository,
         ref_name: &BStr,
         ref_target: &BStr,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,

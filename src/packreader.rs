@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fs::{self, File};
 use std::hash::BuildHasherDefault;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use memmap2::Mmap;
 use rustc_hash::FxHashMap;
@@ -23,7 +24,7 @@ struct Pack {
 
 struct PackWithObjects {
     pack: Mmap,
-    objects: FxHashMap<ObjectHash, usize>,
+    objects: Arc<RwLock<FxHashMap<ObjectHash, usize>>>,
     pack_file: String,
 }
 
@@ -54,13 +55,13 @@ impl PackReader {
             let pack_map = unsafe { Mmap::map(&pack_file)? };
 
             let pack_offsets = get_pack_offsets(Path::new(&pack.idx_file)).unwrap();
-            let mut offsets = FxHashMap::with_capacity_and_hasher(
+            let offsets = Arc::new(RwLock::new(FxHashMap::with_capacity_and_hasher(
                 pack_offsets.len(),
                 BuildHasherDefault::default(),
-            );
+            )));
 
             for offset in pack_offsets.into_iter() {
-                offsets.insert(offset.hash, offset.offset);
+                offsets.write().unwrap().insert(offset.hash, offset.offset);
             }
 
             packs_with_objects.push(PackWithObjects {
@@ -133,7 +134,7 @@ fn get_offset<'a>(
     object_hash: &ObjectHash,
 ) -> Option<(&'a Mmap, usize)> {
     for pack in pack_reader.packs.iter() {
-        if let Some(result) = pack.objects.get(object_hash).map(|x| (&pack.pack, *x)) {
+        if let Some(result) = pack.objects.read().unwrap().get(object_hash).map(|x| (&pack.pack, *x)) {
             return Some(result);
         }
     }

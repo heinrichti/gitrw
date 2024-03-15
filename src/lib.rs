@@ -30,6 +30,7 @@ pub mod objs;
 pub struct Repository {
     path: PathBuf,
     pack_reader: PackReader,
+    decompression: Decompression
 }
 
 impl Clone for Repository {
@@ -37,6 +38,7 @@ impl Clone for Repository {
         Self {
             path: self.path.clone(),
             pack_reader: self.pack_reader.clone(),
+            decompression: Decompression::default(),
         }
     }
 }
@@ -99,16 +101,17 @@ pub fn calculate_hash(data: &[u8], prefix: &[u8]) -> ObjectHash {
 impl Repository {
     pub fn create(path: PathBuf) -> Self {
         let pack_reader = PackReader::create(&path).unwrap();
+        let decompression = Decompression::default();
 
-        Repository {
+        Self {
             path,
             pack_reader,
+            decompression
         }
     }
 
-    pub fn read_object(&self, hash: ObjectHash) -> Option<GitObject> {
-        let mut compression = Decompression::default();
-        commits::read_object_from_hash(&mut compression, &self.path, &self.pack_reader, hash)
+    pub fn read_object(&mut self, hash: ObjectHash) -> Option<GitObject> {
+        commits::read_object_from_hash(&mut self.decompression, &self.path, &self.pack_reader, hash)
     }
 
     pub fn write(mut repo_path: PathBuf, object: WriteObject, dry_run: bool) {
@@ -168,7 +171,7 @@ impl Repository {
     }
 
     pub fn update_refs<T: BuildHasher>(
-        &self,
+        &mut self,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
         dry_run: bool
     ) {

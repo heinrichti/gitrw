@@ -46,7 +46,7 @@ pub fn rewrite(
     let write_thread =
         spawn(move || Repository::write_commits(write_path, rx.into_iter(), dry_run));
 
-    let repository = Repository::create(repository_path);
+    let mut repository = Repository::create(repository_path);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
     for mut commit in repository.commits_topo().map(|c| CommitEditable::create(c)) {
         if let Some(new_author) = mappings.get(commit.author_bytes()) {
