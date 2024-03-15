@@ -69,9 +69,7 @@ impl<'a> Iterator for CommitsFifoIter<'a> {
         while let Some(commit) = self.commits.pop() {
             if self.processed_commits.contains(&commit.hash) {
                 self.parents_seen.remove(&commit.hash);
-            } else if !self.parents_seen.insert(commit.hash.clone())
-                || commit.parents.is_empty()
-            {
+            } else if !self.parents_seen.insert(commit.hash.clone()) || commit.parents.is_empty() {
                 self.processed_commits.insert(commit.hash.clone());
                 return Some(commit);
             } else {
@@ -153,7 +151,8 @@ impl<'a> Iterator for CommitsLifoIter<'a> {
                     .parents
                     .iter()
                     .enumerate()
-                    .map(|(i, _)| commit.get_str(|c| &c.parents[i]).try_into().unwrap()) {
+                    .map(|(i, _)| commit.get_str(|c| &c.parents[i]).try_into().unwrap())
+                {
                     if !self.processed_commits.contains(&parent) {
                         if let Some(parent_commit) = read_object_from_hash(
                             &mut self.decompression,

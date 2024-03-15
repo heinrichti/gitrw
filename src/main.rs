@@ -82,7 +82,11 @@ fn main() {
                 contributors::rewrite(repository_path, cli.dry_run).unwrap();
             }
         },
-        Commands::Remove { file, directory, regex } => {
+        Commands::Remove {
+            file,
+            directory,
+            regex,
+        } => {
             remove::remove(
                 repository_path,
                 file.unwrap_or_default(),
@@ -137,7 +141,7 @@ mod tests {
     use std::sync::mpsc::channel;
 
     use bstr::ByteSlice;
-    use libgitrw::objs::{CommitEditable, CommitHash};
+    use libgitrw::objs::{CommitBase, CommitEditable, CommitHash};
 
     const BYTES: &[u8] = b"tree 31aa860596f003d69b896943677e9fe5ff208233\nparent 5eec99927bb6058c8180e5dac871c89c7d01b0ab\nauthor Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688207675 +0200\ncommitter Tim Heinrich <2929650+TimHeinrich@users.noreply.github.com> 1688209149 +0200\n\nChanging of commit data\n";
 
@@ -148,7 +152,8 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let mut commit = CommitEditable::create(Some(object_hash), BYTES.into(), false);
+        let mut commit =
+            CommitEditable::create(CommitBase::create(object_hash, BYTES.into(), false));
 
         let author = commit.author().to_owned();
         commit.set_author(b"Test user".to_vec());
@@ -163,7 +168,8 @@ mod tests {
             assert_eq!("Test user", commit.author());
             commit.set_author(author.clone().bytes().collect());
             let b = commit.to_bytes();
-            assert_eq!(BYTES.to_vec().into_boxed_slice(), b);
+
+            assert_eq!(BYTES.to_vec().into_boxed_slice(), b.get_bytes().into());
         }
 
         thread.join().unwrap();

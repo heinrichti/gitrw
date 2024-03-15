@@ -1,5 +1,13 @@
 use core::panic;
-use std::{borrow::Cow, cmp::Reverse, collections::{BinaryHeap, HashMap}, hash::BuildHasher, ops::Deref, path::PathBuf, sync::{mpsc::channel, RwLock}};
+use std::{
+    borrow::Cow,
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap},
+    hash::BuildHasher,
+    ops::Deref,
+    path::{Path, PathBuf},
+    sync::{mpsc::channel, RwLock},
+};
 
 use bstr::ByteSlice;
 
@@ -7,9 +15,9 @@ use libgitrw::{
     objs::{CommitBase, CommitEditable, CommitHash, Tree, TreeHash},
     Repository, WriteObject,
 };
-use rustc_hash::FxHashMap;
 use rayon::prelude::*;
 use regex::bytes::RegexSet;
+use rustc_hash::FxHashMap;
 
 macro_rules! b {
     ( $x:expr ) => {
@@ -195,12 +203,18 @@ fn update_tree<T: BuildHasher + Sync + Send>(
     }
 
     if !tree_changed {
-        rewritten_trees.write().unwrap().insert(old_hash.clone(), None);
+        rewritten_trees
+            .write()
+            .unwrap()
+            .insert(old_hash.clone(), None);
         None
     } else {
         let tree: Tree = filtered_lines.into_iter().collect();
         let new_hash = tree.hash().clone();
-        rewritten_trees.write().unwrap().insert(old_hash.clone(), Some(new_hash.clone()));
+        rewritten_trees
+            .write()
+            .unwrap()
+            .insert(old_hash.clone(), Some(new_hash.clone()));
         write_tree(tree);
         Some(new_hash)
     }
@@ -211,8 +225,7 @@ struct OrderedCommit {
     index: usize,
 }
 
-impl Eq for OrderedCommit{
-}
+impl Eq for OrderedCommit {}
 
 impl PartialEq for OrderedCommit {
     fn eq(&self, other: &Self) -> bool {
@@ -229,7 +242,7 @@ impl PartialOrd for OrderedCommit {
 impl Ord for OrderedCommit {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.index.cmp(&other.index)
-    } 
+    }
 }
 
 pub fn remove(
@@ -240,7 +253,8 @@ pub fn remove(
     dry_run: bool,
 ) {
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    let rewritten_trees: RwLock<HashMap<TreeHash, Option<TreeHash>, _>> = RwLock::new(FxHashMap::default());
+    let rewritten_trees: RwLock<HashMap<TreeHash, Option<TreeHash>, _>> =
+        RwLock::new(FxHashMap::default());
 
     let mut repository = rayon::scope(|scope| {
         let (tx, rx) = channel::<OrderedCommit>();
@@ -252,7 +266,13 @@ pub fn remove(
                     commit_index += 1;
 
                     let commit = CommitEditable::create(ordered_commit.commit);
-                    let (old_hash, new_hash) = update_commit(&repository_path, commit, &rewritten_commits, &rewritten_trees, dry_run);
+                    let (old_hash, new_hash) = update_commit(
+                        &repository_path,
+                        commit,
+                        &rewritten_commits,
+                        &rewritten_trees,
+                        dry_run,
+                    );
                     if old_hash != new_hash {
                         rewritten_commits.insert(old_hash, new_hash);
                     }
@@ -262,7 +282,13 @@ pub fn remove(
                             commit_index += 1;
 
                             let commit = CommitEditable::create(commit.0.commit);
-                            let (old_hash, new_hash) = update_commit(&repository_path, commit, &rewritten_commits, &rewritten_trees, dry_run);
+                            let (old_hash, new_hash) = update_commit(
+                                &repository_path,
+                                commit,
+                                &rewritten_commits,
+                                &rewritten_trees,
+                                dry_run,
+                            );
                             if old_hash != new_hash {
                                 rewritten_commits.insert(old_hash, new_hash);
                             }
@@ -281,29 +307,31 @@ pub fn remove(
         let file_delete_patterns = build_file_delete_patterns(&files);
         let folder_delete_patterns = build_folder_delete_patterns(&directories);
         let should_remove_line = build_regex_pattern(&regexes);
-        repository.commits_topo().enumerate()
+        repository
+            .commits_topo()
+            .enumerate()
             .map(|(index, commit)| OrderedCommit { index, commit })
             .par_bridge()
             .for_each_with(repository.clone(), |repository, commit| {
-            let old_tree_hash = commit.commit.tree();
-            update_tree(
-                old_tree_hash,
-                b"/",
-                repository,
-                &file_delete_patterns,
-                &folder_delete_patterns,
-                &should_remove_line,
-                &rewritten_trees,
-                &|tree| {
-                    if !dry_run {
-                        // TODO write out on different thread
-                        Repository::write(repository_path.clone(), tree.into(), dry_run);
-                    }
-                },
-            );
-    
-            tx.send(commit).unwrap();
-        });
+                let old_tree_hash = commit.commit.tree();
+                update_tree(
+                    old_tree_hash,
+                    b"/",
+                    repository,
+                    &file_delete_patterns,
+                    &folder_delete_patterns,
+                    &should_remove_line,
+                    &rewritten_trees,
+                    &|tree| {
+                        if !dry_run {
+                            // TODO write out on different thread
+                            Repository::write(repository_path.clone(), tree.into(), dry_run);
+                        }
+                    },
+                );
+
+                tx.send(commit).unwrap();
+            });
 
         std::mem::drop(tx);
 
@@ -315,33 +343,44 @@ pub fn remove(
 }
 
 fn update_commit(
-    repo_path: &PathBuf,
-    mut commit: CommitEditable, 
-    rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>, 
-    rewritten_trees: &RwLock<HashMap<TreeHash, Option<TreeHash>, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>>,
-    dry_run: bool) -> (CommitHash, CommitHash) {
+    repo_path: &Path,
+    mut commit: CommitEditable,
+    rewritten_commits: &HashMap<
+        CommitHash,
+        CommitHash,
+        std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+    >,
+    rewritten_trees: &RwLock<
+        HashMap<TreeHash, Option<TreeHash>, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>,
+    >,
+    dry_run: bool,
+) -> (CommitHash, CommitHash) {
     let old_hash = commit.base_hash().clone();
 
     update_parents(&mut commit, rewritten_commits);
     // update tree
-    if let Some(new_tree_hash) = rewritten_trees.read().unwrap()
-        .get(&commit.tree()) {
-        if let Some(new_tree_hash) = new_tree_hash {
-            commit.set_tree(new_tree_hash.clone());
-        }
+    if let Some(Some(new_tree_hash)) = rewritten_trees.read().unwrap().get(&commit.tree()) {
+        commit.set_tree(new_tree_hash.clone());
     }
-    
+
     if commit.has_changes() {
         let write_object: WriteObject = commit.into();
         let new_hash = write_object.hash.clone();
-        Repository::write(repo_path.clone(), write_object, dry_run);
+        Repository::write(repo_path.into(), write_object, dry_run);
         return (old_hash, new_hash.into());
     }
 
     (old_hash.clone(), old_hash)
 }
 
-fn update_parents(commit: &mut CommitEditable, rewritten_commits: &HashMap<CommitHash, CommitHash, std::hash::BuildHasherDefault<rustc_hash::FxHasher>>) {
+fn update_parents(
+    commit: &mut CommitEditable,
+    rewritten_commits: &HashMap<
+        CommitHash,
+        CommitHash,
+        std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+    >,
+) {
     for (i, parent) in commit.parents().iter().enumerate() {
         if let Some(new_parent) = rewritten_commits.get(parent) {
             if new_parent != parent {

@@ -89,7 +89,13 @@ impl GitRef {
         dry_run: bool,
     ) {
         for r in repository.refs().unwrap() {
-            Self::rewrite_ref(repository, r.get_name(), r.get_target(), rewritten_commits, dry_run);
+            Self::rewrite_ref(
+                repository,
+                r.get_name(),
+                r.get_target(),
+                rewritten_commits,
+                dry_run,
+            );
         }
 
         let mut path = repository.path.clone();
@@ -177,7 +183,7 @@ fn get_loose_refs(base_path: &Path, current_path: &str) -> Vec<GitRef> {
     let mut result: Vec<GitRef> = Vec::new();
 
     let full_path = base_path.join(current_path);
-    for dir_entry in std::fs::read_dir(&full_path).unwrap().map(|x| x.unwrap()) {
+    for dir_entry in std::fs::read_dir(full_path).unwrap().map(|x| x.unwrap()) {
         let file_type = dir_entry.file_type().unwrap();
         if file_type.is_dir() {
             let mut next_path = String::new();

@@ -4,7 +4,7 @@ use bstr::{BStr, BString, ByteSlice, ByteVec};
 
 use crate::shared::SliceIndexes;
 
-use super::{CommitEditable, CommitBase, CommitHash, ObjectHash, TreeHash, WriteBytes};
+use super::{CommitBase, CommitEditable, CommitHash, ObjectHash, TreeHash, WriteBytes};
 use memchr::memchr;
 
 impl Display for CommitHash {
@@ -78,8 +78,10 @@ impl CommitBase {
 
         let committer_line = line_reader.next().map(|line| &line[10..]).unwrap();
         let committer_time_index = time_index(committer_line);
-        let committer = SliceIndexes::from_slice(&bytes, &committer_line[0..committer_time_index], 0);
-        let committer_time = SliceIndexes::from_slice(&bytes, committer_line, committer_time_index + 1);
+        let committer =
+            SliceIndexes::from_slice(&bytes, &committer_line[0..committer_time_index], 0);
+        let committer_time =
+            SliceIndexes::from_slice(&bytes, committer_line, committer_time_index + 1);
 
         let committer_line_start: usize =
             unsafe { committer_line.as_ptr().offset_from(bytes.as_ptr()) }
@@ -105,19 +107,21 @@ impl CommitBase {
     }
 
     pub(crate) fn get_str(&self, f: impl Fn(&CommitBase) -> &SliceIndexes) -> &BStr {
-        f(&self).get(&self.bytes.bytes).as_bstr()
+        f(self).get(&self.bytes.bytes).as_bstr()
     }
 
     pub fn parents(&self) -> Vec<CommitHash> {
-        self.parents.iter().enumerate().map(|(i, _)| {
-            self.get_str(|c| &c.parents[i]).try_into().unwrap()
-        }).collect()
+        self.parents
+            .iter()
+            .enumerate()
+            .map(|(i, _)| self.get_str(|c| &c.parents[i]).try_into().unwrap())
+            .collect()
     }
 
     pub fn author(&self) -> &bstr::BStr {
         self.get_str(|c| &c.author)
     }
-    
+
     pub fn committer(&self) -> &bstr::BStr {
         self.get_str(|c| &c.committer)
     }
@@ -140,20 +144,28 @@ impl CommitEditable {
     }
 
     pub fn has_changes(&self) -> bool {
-        self.tree.is_some() 
-            || self.author.is_some() 
-            || self.committer.is_some() 
+        self.tree.is_some()
+            || self.author.is_some()
+            || self.committer.is_some()
             || self.parents.iter().any(|p| p.is_some())
     }
 
     pub fn parents(&self) -> Vec<CommitHash> {
-        self.parents.iter().enumerate().map(|(i, p)| {
-            if let Some(p) = p {
-                p.clone()
-            } else {
-                self.base.parents[i].get(&self.base.bytes.bytes).as_bstr().try_into().unwrap()
-            }
-        }).collect()
+        self.parents
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if let Some(p) = p {
+                    p.clone()
+                } else {
+                    self.base.parents[i]
+                        .get(&self.base.bytes.bytes)
+                        .as_bstr()
+                        .try_into()
+                        .unwrap()
+                }
+            })
+            .collect()
     }
 
     pub fn base_hash(&self) -> &CommitHash {
@@ -188,6 +200,14 @@ impl CommitEditable {
         }
     }
 
+    pub fn author(&self) -> &bstr::BStr {
+        if let Some(author) = &self.author {
+            author.as_bstr()
+        } else {
+            self.base.get_str(|c| &c.author)
+        }
+    }
+
     pub fn set_author(&mut self, author: Vec<u8>) {
         self.author = Some(author);
     }
@@ -217,14 +237,16 @@ impl CommitEditable {
     //     }
     // }
 
-    fn get_str(&self, 
+    fn get_str(
+        &self,
         self_getter: impl Fn(&Self) -> &Option<Vec<u8>>,
-        base_getter: impl Fn(&CommitBase) -> &SliceIndexes) -> &BStr {
-            if let Some(v) = self_getter(self) {
-                v.as_bstr()
-            } else {
-                self.base.get_str(base_getter)
-            }
+        base_getter: impl Fn(&CommitBase) -> &SliceIndexes,
+    ) -> &BStr {
+        if let Some(v) = self_getter(self) {
+            v.as_bstr()
+        } else {
+            self.base.get_str(base_getter)
+        }
     }
 
     pub fn to_bytes(self) -> WriteBytes {
@@ -249,16 +271,19 @@ impl CommitEditable {
         let committer = self.get_str(|c| &c.committer, |c| &c.committer);
         let committer_time = self.base.get_str(|c| &c.committer_time);
         let remainder = self.base.get_str(|c| &c.remainder);
-        
+
         let mut result: Vec<u8> = Vec::with_capacity(
-            b"tree \n".len() + tree.len()
+            b"tree \n".len()
+                + tree.len()
                 + parents
                     .iter()
                     .map(|parent| b"parent \n".len() + parent.len())
                     .sum::<usize>()
-                + b"author  \n".len() + author.len()
+                + b"author  \n".len()
+                + author.len()
                 + committer_time.len()
-                + b"committer  \n".len() + committer.len()
+                + b"committer  \n".len()
+                + committer.len()
                 + author_time.len()
                 + remainder.len(),
         );

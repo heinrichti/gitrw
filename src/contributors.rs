@@ -1,4 +1,7 @@
-use std::{collections::HashMap, error::Error, io::stdin, path::PathBuf, sync::mpsc::channel, thread::spawn};
+use std::{
+    collections::HashMap, error::Error, io::stdin, path::PathBuf, sync::mpsc::channel,
+    thread::spawn,
+};
 
 use bstr::{io::BufReadExt, BString, ByteSlice};
 use libgitrw::{
@@ -35,10 +38,7 @@ fn get_mappings() -> Result<FxHashMap<Vec<u8>, Vec<u8>>, Box<dyn Error>> {
     Ok(mappings)
 }
 
-pub fn rewrite(
-    repository_path: PathBuf,
-    dry_run: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn rewrite(repository_path: PathBuf, dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
     let mappings = get_mappings()?;
 
     let (tx, rx) = channel();
@@ -48,7 +48,7 @@ pub fn rewrite(
 
     let mut repository = Repository::create(repository_path);
     let mut rewritten_commits: HashMap<CommitHash, CommitHash, _> = FxHashMap::default();
-    for mut commit in repository.commits_topo().map(|c| CommitEditable::create(c)) {
+    for mut commit in repository.commits_topo().map(CommitEditable::create) {
         if let Some(new_author) = mappings.get(commit.author_bytes()) {
             commit.set_author(new_author.clone());
         }

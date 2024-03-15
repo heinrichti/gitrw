@@ -2,7 +2,10 @@ use std::{borrow::Cow, fmt::Display};
 
 use bstr::{BStr, ByteSlice, ByteVec};
 
-use crate::{shared::{self, RefSlice}, WriteBytes};
+use crate::{
+    shared::{self, RefSlice},
+    WriteBytes,
+};
 
 use super::{ObjectHash, Tree, TreeHash};
 
@@ -10,8 +13,8 @@ impl Tree {
     pub fn create(object_hash: TreeHash, bytes: Box<[u8]>, skip_first_null: bool) -> Tree {
         let start_index = if skip_first_null {
             bytes.iter().position(|x| *x == b'\0').unwrap() + 1
-        } else { 
-            0 
+        } else {
+            0
         };
 
         let mut position = start_index;

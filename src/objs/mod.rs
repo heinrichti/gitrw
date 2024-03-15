@@ -1,4 +1,7 @@
-use crate::{shared::{ObjectHash, RefSlice, SliceIndexes}, WriteBytes};
+use crate::{
+    shared::{ObjectHash, RefSlice, SliceIndexes},
+    WriteBytes,
+};
 
 use self::tree::TreeLineIndex;
 

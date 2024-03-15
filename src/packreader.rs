@@ -134,7 +134,13 @@ fn get_offset<'a>(
     object_hash: &ObjectHash,
 ) -> Option<(&'a Mmap, usize)> {
     for pack in pack_reader.packs.iter() {
-        if let Some(result) = pack.objects.read().unwrap().get(object_hash).map(|x| (&pack.pack, *x)) {
+        if let Some(result) = pack
+            .objects
+            .read()
+            .unwrap()
+            .get(object_hash)
+            .map(|x| (&pack.pack, *x))
+        {
             return Some(result);
         }
     }

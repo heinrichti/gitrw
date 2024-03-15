@@ -43,8 +43,9 @@ fn find_empty_commits(
     let mut rewritten_commits: FxHashMap<CommitHash, CommitHash> = FxHashMap::default();
     let mut commit_trees: FxHashMap<CommitHash, TreeHash> = FxHashMap::default();
 
-    for mut commit in repository.commits_topo().map(|c| CommitEditable::create(c)) {
-        if let Some(parent) = get_parent_if_empty_commit(&commit, &rewritten_commits, &commit_trees) {
+    for mut commit in repository.commits_topo().map(CommitEditable::create) {
+        if let Some(parent) = get_parent_if_empty_commit(&commit, &rewritten_commits, &commit_trees)
+        {
             rewritten_commits.insert(commit.base_hash().clone(), parent);
             continue;
         }
@@ -61,10 +62,9 @@ fn find_empty_commits(
         let w: WriteObject = commit.into();
 
         let new_hash: CommitHash = w.hash.clone().into();
-        commit_trees.insert(CommitHash::from(new_hash.clone()), commit_tree);
+        commit_trees.insert(new_hash.clone(), commit_tree);
 
-        
-        if &base_hash != &new_hash {
+        if base_hash != new_hash {
             rewritten_commits.insert(base_hash, new_hash.clone());
             tx.send(w).unwrap();
         }

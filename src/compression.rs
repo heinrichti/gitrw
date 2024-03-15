@@ -43,9 +43,7 @@ pub fn pack_file(path: &Path, prefix: &str, write_bytes: &WriteBytes) -> Result<
     compress.write_all(data).unwrap();
     let data = compress.finish().unwrap();
 
-    buf_writer
-        .write_all(&data)
-        .unwrap();
+    buf_writer.write_all(&data).unwrap();
 
     Ok(())
 }

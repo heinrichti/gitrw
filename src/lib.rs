@@ -10,7 +10,7 @@ use std::{
 use commits::{CommitsFifoIter, CommitsLifoIter};
 use compression::Decompression;
 
-use objs::{CommitEditable, CommitBase, CommitHash, GitObject, Tag, Tree};
+use objs::{CommitBase, CommitEditable, CommitHash, GitObject, Tag, Tree};
 use packreader::PackReader;
 use rayon::prelude::{ParallelBridge, ParallelIterator};
 use refs::GitRef;
@@ -31,7 +31,7 @@ pub mod objs;
 pub struct Repository {
     path: PathBuf,
     pack_reader: PackReader,
-    decompression: Decompression
+    decompression: Decompression,
 }
 
 impl Clone for Repository {
@@ -48,6 +48,12 @@ impl Clone for Repository {
 pub struct WriteBytes {
     bytes: Box<[u8]>,
     start: usize,
+}
+
+impl WriteBytes {
+    pub fn get_bytes(&self) -> &[u8] {
+        &self.bytes[self.start..]
+    }
 }
 
 pub struct WriteObject {
@@ -107,7 +113,7 @@ impl Repository {
         Self {
             path,
             pack_reader,
-            decompression
+            decompression,
         }
     }
 
@@ -132,13 +138,11 @@ impl Repository {
         repo_path.push(&hash[2..]);
         if !Path::new(&repo_path).exists() {
             match compression::pack_file(&repo_path, prefix.as_str(), &data) {
-                Ok(_) => {},
-                Err(e) => {
-                    match e.kind() {
-                        io::ErrorKind::AlreadyExists => {},
-                        _ => panic!("Error writing object: {}", e)
-                    }
-                }
+                Ok(_) => {}
+                Err(e) => match e.kind() {
+                    io::ErrorKind::AlreadyExists => {}
+                    _ => panic!("Error writing object: {}", e),
+                },
             }
         }
     }
@@ -148,11 +152,9 @@ impl Repository {
         commits: impl Iterator<Item = WriteObject> + Send,
         dry_run: bool,
     ) {
-        commits
-            .par_bridge()
-            .for_each(|commit| {
-                Self::write(repository_path.clone(), commit, dry_run);
-            });
+        commits.par_bridge().for_each(|commit| {
+            Self::write(repository_path.clone(), commit, dry_run);
+        });
     }
 
     pub fn write_trees(
@@ -160,11 +162,9 @@ impl Repository {
         trees: impl Iterator<Item = objs::Tree> + Send,
         dry_run: bool,
     ) {
-        trees
-            .par_bridge()
-            .for_each(|tree| {
-                Self::write(repository_path.clone(), tree.into(), dry_run);
-            });
+        trees.par_bridge().for_each(|tree| {
+            Self::write(repository_path.clone(), tree.into(), dry_run);
+        });
     }
 
     pub fn commits_topo(&self) -> impl Iterator<Item = CommitBase> + '_ {
@@ -182,7 +182,7 @@ impl Repository {
     pub fn update_refs<T: BuildHasher>(
         &mut self,
         rewritten_commits: &HashMap<CommitHash, CommitHash, T>,
-        dry_run: bool
+        dry_run: bool,
     ) {
         if !dry_run {
             refs::GitRef::update(self, rewritten_commits, dry_run);
@@ -195,7 +195,7 @@ impl Repository {
             CommitHash,
             std::hash::BuildHasherDefault<rustc_hash::FxHasher>,
         >,
-        dry_run: bool
+        dry_run: bool,
     ) {
         if dry_run {
             return;
