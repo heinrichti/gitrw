@@ -81,7 +81,27 @@ impl PackReader {
         decompression: &mut Decompression,
         object_hash: ObjectHash,
     ) -> Option<GitObject> {
-        if let Some((mmap, offset)) = get_offset(self, &object_hash) {
+        if let Some(r) = self.read_git_object_bytes(decompression, &object_hash) {
+            let git_object = match r.1.object_type {
+                1u8 => GitObject::Commit(CommitBase::create(object_hash.into(), r.0, false)),
+                2u8 => GitObject::Tree(Tree::create(object_hash.into(), r.0, false)),
+                // 3u8 => GitObject::Blob(Blob::create(object_hash, bytes)),
+                4u8 => GitObject::Tag(Tag::create(object_hash.into(), r.0, false)),
+                _ => panic!("unknown git object type"),
+            };
+
+            Some(git_object)
+        } else {
+            None
+        }
+    }
+
+    pub fn read_git_object_bytes(
+        &self,
+        decompression: &mut Decompression,
+        object_hash: &ObjectHash,
+    ) -> Option<(Box<[u8]>, PackObject)> {
+        if let Some((mmap, offset)) = get_offset(self, object_hash) {
             let bytes: Box<[u8]>;
 
             let mut pack_object = PackObject::create(mmap, offset);
@@ -89,21 +109,24 @@ impl PackReader {
                 // diff
                 (bytes, pack_object) = restore_diff_object_bytes(decompression, mmap, pack_object);
             } else if pack_object.object_type == 7 {
-                panic!("OBJ_REF_DELTA not implemented");
+                // OBJ_REF_DELTA: 20 bytes for the base object hash, then the instructions
+                let slice_start = pack_object.offset + pack_object.header_len;
+                let base_object_hash: ObjectHash =
+                    mmap[slice_start..slice_start + 20].try_into().unwrap();
+
+                let base = self
+                    .read_git_object_bytes(decompression, &base_object_hash)
+                    .unwrap();
+
+                let pack_diff = PackDiff::create_for_ref(decompression, mmap, &pack_object);
+                bytes = pack_diff.apply(&base.0);
+                pack_object = base.1;
             } else {
                 // plain object, should be easy to extract
                 bytes = decompression.unpack(mmap, &pack_object, 0);
             }
 
-            let git_object = match pack_object.object_type {
-                1u8 => GitObject::Commit(CommitBase::create(object_hash.into(), bytes, false)),
-                2u8 => GitObject::Tree(Tree::create(object_hash.into(), bytes, false)),
-                // 3u8 => GitObject::Blob(Blob::create(object_hash, bytes)),
-                4u8 => GitObject::Tag(Tag::create(object_hash.into(), bytes, false)),
-                _ => panic!("unknown git object type"),
-            };
-
-            return Some(git_object);
+            return Some((bytes, pack_object));
         }
 
         None

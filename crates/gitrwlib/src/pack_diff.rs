@@ -95,6 +95,7 @@ impl AddInstruction {
     }
 }
 
+#[derive(Debug)]
 pub enum DiffInstruction {
     Copy(CopyInstruction),
     Add(AddInstruction),
@@ -109,6 +110,7 @@ impl DiffInstruction {
     }
 }
 
+#[derive(Debug)]
 pub struct PackDiff {
     pub target_len: usize,
     pub negative_offset: usize,
@@ -135,6 +137,27 @@ impl PackDiff {
             instructions,
             target_len,
             negative_offset: base_offset,
+        }
+    }
+
+    pub fn create_for_ref(
+        compression: &mut Decompression,
+        mmap: &Mmap,
+        pack_object: &PackObject,
+    ) -> PackDiff {
+        // TODO consolidate with Self::create
+        let diff_instruction_bytes = compression.unpack(mmap, pack_object, 20);
+
+        let (_, bytes_read) = read_varint(&diff_instruction_bytes, 0);
+        let (target_len, bytes_read) = read_varint(&diff_instruction_bytes, bytes_read);
+
+        let instructions =
+            build_delta_instructions(diff_instruction_bytes, pack_object, bytes_read);
+
+        PackDiff {
+            instructions,
+            target_len,
+            negative_offset: 0,
         }
     }
 
